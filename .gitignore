@@ -1,0 +1,24 @@
+# Real env files. Only the *.example templates are committed - they are the
+# documentation of what must be set, with no values in them.
+.env
+.env.*
+!.env.example
+
+# SSH keys and certificates. A deploy repo is exactly where one gets dropped
+# "just for a second" and then committed.
+*.pem
+*.key
+*.p12
+id_rsa*
+
+# Terraform artefacts are covered by terraform/.gitignore; this catches any that
+# get run from the repo root by mistake.
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+.terraform/
+
+# OS / editor noise
+.DS_Store
+.vscode/

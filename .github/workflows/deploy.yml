@@ -1,0 +1,215 @@
+# ═════════════════════════════════════════════════════════════════════════════
+# CI/CD — build, test, and deploy the kehilapp backend image to the EC2 box.
+#
+# The flow (top to bottom):
+#   1. test    → run the backend Jest suite. Nothing ships if tests fail.
+#   2. build   → build the backend Docker image and PUSH it to GHCR
+#                (GitHub Container Registry), tagged with the git SHA + a moving
+#                tag (dev or latest).
+#   3. deploy  → SSH into the server and run `docker compose pull && up -d` so it
+#                grabs the freshly-pushed image and restarts just that service.
+#
+# Two environments, gated by BRANCH:
+#   • push to `develop`  → deploys to DEV   (uses the *_DEV secrets)
+#   • push to `main`     → deploys to PROD  (uses the *_PROD secrets)
+#
+# NOTE ON SCOPE: this pipeline builds/ships the BACKEND image (the part that
+# changes most and needs tests). The two Vite frontends build the same way —
+# add matching jobs (or a build matrix) pointing at admin.Dockerfile /
+# frontend.Dockerfile when you want CI to push those too. The compose file
+# already pulls all three by tag.
+# ═════════════════════════════════════════════════════════════════════════════
+
+name: deploy
+
+# WHEN does this run?
+on:
+  push:
+    branches: [main, develop]
+  workflow_dispatch: {} # ...and a manual "Run workflow" button in the Actions tab.
+
+# GHCR image name is derived from the repo owner. Lowercased at use.
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/kehilapp-backend
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SECRETS you must add (Repo → Settings → Secrets and variables → Actions).
+# Use GitHub "Environments" (dev / prod) so prod can require an approval click.
+#
+#   DEV environment:
+#     SSH_HOST_DEV          public IP / DNS of the dev box   (Terraform output)
+#     SSH_USER_DEV          usually  ubuntu
+#     SSH_PRIVATE_KEY_DEV   the PRIVATE half of the key pair Terraform uploaded
+#     SSH_PORT_DEV          22 (optional; defaults to 22)
+#
+#   PROD environment:
+#     SSH_HOST_PROD / SSH_USER_PROD / SSH_PRIVATE_KEY_PROD / SSH_PORT_PROD
+#
+# Pushing the image to GHCR uses the built-in GITHUB_TOKEN — no secret needed.
+# The server pulls from GHCR; if your packages are PRIVATE, also run
+# `docker login ghcr.io` on the box once (see runbooks/02-deploy.md).
+# ─────────────────────────────────────────────────────────────────────────────
+
+jobs:
+  # ── 1. TEST ────────────────────────────────────────────────────────────────
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the backend repo
+        uses: actions/checkout@v4
+        with:
+          # The backend source lives in a SEPARATE repo from this devops repo.
+          # Adjust owner/name to your actual backend repo path.
+          repository: ${{ github.repository_owner }}/kehilapp-backend-hardened
+          # A PAT in secrets.BACKEND_REPO_TOKEN is only needed if that repo is
+          # private. For a public repo you can delete the `token:` line.
+          token: ${{ secrets.BACKEND_REPO_TOKEN || github.token }}
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies (clean, from lockfile)
+        run: npm ci
+
+      - name: Run tests
+        # The suite spins up an in-memory Mongo (mongodb-memory-server), so no
+        # external database is needed in CI.
+        run: npm test
+        env:
+          NODE_ENV: test
+
+  # ── 2. BUILD + PUSH IMAGE ──────────────────────────────────────────────────
+  build:
+    needs: test # only build if tests passed
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # allow pushing to GHCR
+    steps:
+      - name: Check out the DEVOPS repo (has the Dockerfile)
+        uses: actions/checkout@v4
+
+      - name: Check out backend source into ./app
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/kehilapp-backend-hardened
+          token: ${{ secrets.BACKEND_REPO_TOKEN || github.token }}
+          path: app
+
+      - name: Set up Docker Buildx (multi-arch builder)
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Work out image tags
+        id: tags
+        run: |
+          echo "sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          if [ "${GITHUB_REF_NAME}" = "main" ]; then
+            echo "moving=latest" >> "$GITHUB_OUTPUT"
+          else
+            echo "moving=dev" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./app # the backend source
+          file: ./docker/backend.Dockerfile # the Dockerfile from THIS repo
+          push: true
+          # linux/arm64 because the server is ARM (t4g/Graviton). If you ever run
+          # an x86 box too, use: linux/amd64,linux/arm64
+          platforms: linux/arm64
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tags.outputs.sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tags.outputs.moving }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ── 3a. DEPLOY TO DEV ──────────────────────────────────────────────────────
+  deploy-dev:
+    needs: build
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    environment: dev # ties to the GitHub "dev" environment + its secrets
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SSH_HOST_DEV }}
+          username: ${{ secrets.SSH_USER_DEV }}
+          key: ${{ secrets.SSH_PRIVATE_KEY_DEV }}
+          port: ${{ secrets.SSH_PORT_DEV || 22 }}
+          script: |
+            set -e
+            cd /opt/kehilapp
+            git pull --ff-only || true          # refresh compose/nginx/caddy configs
+            export TAG=dev
+            export REGISTRY=ghcr.io/${{ github.repository_owner }}
+            docker compose -f docker-compose.prod.yml --env-file .env pull
+            docker compose -f docker-compose.prod.yml --env-file .env up -d
+            docker image prune -f               # reclaim disk from old images
+
+      - name: Smoke-check /readyz
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SSH_HOST_DEV }}
+          username: ${{ secrets.SSH_USER_DEV }}
+          key: ${{ secrets.SSH_PRIVATE_KEY_DEV }}
+          port: ${{ secrets.SSH_PORT_DEV || 22 }}
+          script: |
+            # Give it a few seconds, then confirm the backend is ready. In prod
+            # only Caddy (80/443) is published, so we probe the backend from
+            # INSIDE the docker network instead of a host port.
+            sleep 8
+            cd /opt/kehilapp
+            docker compose -f docker-compose.prod.yml exec -T backend \
+              wget -qO- http://127.0.0.1:5001/readyz \
+              || (echo "readyz FAILED" && exit 1)
+
+  # ── 3b. DEPLOY TO PROD ─────────────────────────────────────────────────────
+  deploy-prod:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: prod # add a required reviewer here for a manual approval gate
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SSH_HOST_PROD }}
+          username: ${{ secrets.SSH_USER_PROD }}
+          key: ${{ secrets.SSH_PRIVATE_KEY_PROD }}
+          port: ${{ secrets.SSH_PORT_PROD || 22 }}
+          script: |
+            set -e
+            cd /opt/kehilapp
+            git pull --ff-only || true
+            export TAG=latest
+            export REGISTRY=ghcr.io/${{ github.repository_owner }}
+            docker compose -f docker-compose.prod.yml --env-file .env pull
+            docker compose -f docker-compose.prod.yml --env-file .env up -d
+            docker image prune -f
+
+      - name: Smoke-check /readyz
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SSH_HOST_PROD }}
+          username: ${{ secrets.SSH_USER_PROD }}
+          key: ${{ secrets.SSH_PRIVATE_KEY_PROD }}
+          port: ${{ secrets.SSH_PORT_PROD || 22 }}
+          script: |
+            sleep 8
+            cd /opt/kehilapp
+            docker compose -f docker-compose.prod.yml exec -T backend \
+              wget -qO- http://127.0.0.1:5001/readyz \
+              || (echo "readyz FAILED" && exit 1)

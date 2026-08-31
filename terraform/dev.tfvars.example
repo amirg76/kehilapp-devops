@@ -1,0 +1,39 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# dev.tfvars.example — DEV environment values.
+#
+# HOW TO USE:
+#   1. cp dev.tfvars.example dev.tfvars      (dev.tfvars is git-ignored)
+#   2. edit the two lines marked  # ← CHANGE
+#   3. terraform apply -var-file="dev.tfvars"
+#
+# This file has NO secrets — only sizes, regions, and your public IP. Safe to
+# read, but keep the real dev.tfvars out of git (it holds your personal IP).
+# ─────────────────────────────────────────────────────────────────────────────
+
+environment      = "dev"
+region           = "eu-central-1"     # Frankfurt
+
+# Cheapest sensible dev box: ARM Graviton, 1 vCPU / 1 GB. ~$0.0084/hr.
+# (Bump to t4g.small if Mongo feels tight.)
+instance_type    = "t4g.micro"
+cpu_architecture = "arm64"            # MUST stay arm64 for any t4g.* type
+
+root_volume_gb   = 20
+
+# Lock SSH to YOUR ip. Find it: curl ifconfig.me   → then "x.x.x.x/32".
+allowed_ssh_cidr = "203.0.113.7/32"   # ← CHANGE to your.ip/32
+
+# SSH key. create_key_pair=true uploads this public key as a new EC2 key pair.
+# Make one first: ssh-keygen -t ed25519 -f ~/.ssh/kehilapp
+key_name         = "kehilapp-dev-key"
+create_key_pair  = true
+public_key_path  = "~/.ssh/kehilapp.pub"
+
+# Optional. Leave "" to run dev over plain HTTP by IP (no cert hassle for dev).
+domain           = ""                 # ← CHANGE e.g. "dev.kehilapp.example.com"
+
+# Give dev a fixed IP too so you don't chase a new one after each stop/start.
+assign_elastic_ip = true
+
+# The public git URL of THIS devops repo (user_data clones it on boot).
+repo_url         = "https://github.com/OWNER/kehilapp-devops.git"

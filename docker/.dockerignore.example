@@ -1,0 +1,22 @@
+# Copy this file into EACH app repo as `.dockerignore` (next to package.json).
+# It keeps junk out of the build context → smaller, faster, safer images.
+# The single most important line is `.env` — never bake secrets into an image.
+
+node_modules
+npm-debug.log
+.env
+.env.*
+!.env.example
+.git
+.gitignore
+Dockerfile
+.dockerignore
+coverage
+dist
+build
+.vscode
+.idea
+*.md
+e2e
+playwright-report
+test-results

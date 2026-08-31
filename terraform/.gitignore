@@ -1,0 +1,20 @@
+# ── Terraform: never commit these ────────────────────────────────────────────
+# Real variable files (they hold your IP / domain / maybe key names).
+# Only the *.tfvars.example templates are committed.
+*.tfvars
+!*.tfvars.example
+
+# State can contain sensitive values (IDs, sometimes secrets). Use remote state
+# (backend.tf.example) for real teams; never commit the local file.
+*.tfstate
+*.tfstate.*
+.terraform.tfstate.lock.info
+
+# The downloaded provider plugins (huge, machine-specific).
+.terraform/
+.terraform.lock.hcl
+
+# Crash logs and plan output files.
+crash.log
+crash.*.log
+*.tfplan

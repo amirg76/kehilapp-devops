@@ -1,0 +1,36 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# prod.tfvars.example — PROD environment values.
+#
+# HOW TO USE:
+#   1. cp prod.tfvars.example prod.tfvars     (prod.tfvars is git-ignored)
+#   2. edit the lines marked  # ← CHANGE
+#   3. terraform workspace new prod   (once) ; terraform workspace select prod
+#   4. terraform apply -var-file="prod.tfvars"
+#
+# Workspaces keep dev + prod STATE separate so applying prod never touches dev.
+# (See terraform/README.md for the workspace vs. separate-dir explanation.)
+# ─────────────────────────────────────────────────────────────────────────────
+
+environment      = "prod"
+region           = "eu-central-1"
+
+# Recommended prod box: ARM Graviton, 2 vCPU / 2 GB. ~$0.0168/hr.
+# The extra 1 GB matters because self-hosted Mongo + 5 containers share this box.
+instance_type    = "t4g.small"
+cpu_architecture = "arm64"
+
+root_volume_gb   = 30                 # a little more headroom for Mongo data
+
+# Lock SSH to your admin IP/range. Never 0.0.0.0/0 in prod.
+allowed_ssh_cidr = "203.0.113.7/32"   # ← CHANGE to your.ip/32
+
+key_name         = "kehilapp-prod-key"
+create_key_pair  = true
+public_key_path  = "~/.ssh/kehilapp.pub"
+
+# Prod SHOULD have a real domain so Caddy can issue an HTTPS certificate.
+domain           = "kehilapp.example.com"  # ← CHANGE to your domain
+
+assign_elastic_ip = true              # fixed IP your DNS A-record points at
+
+repo_url         = "https://github.com/OWNER/kehilapp-devops.git"

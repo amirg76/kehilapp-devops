@@ -1,0 +1,105 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# PRODUCTION / server compose — runs on the EC2 box.
+#
+# Difference from the local file: it does NOT build anything. It PULLS
+# pre-built, tagged images from the GitHub Container Registry (GHCR) that the
+# CI/CD pipeline pushed. The server stays dumb: pull image, restart container.
+#
+#     docker compose -f docker-compose.prod.yml pull
+#     docker compose -f docker-compose.prod.yml up -d
+#
+# Config comes entirely from an .env file sitting next to this one on the server
+# (see runbooks/00-initial-server-setup.md). Never commit that .env.
+#
+# TLS: Caddy is the public entry point (ports 80/443) and terminates HTTPS
+# automatically via Let's Encrypt, then proxies to the internal nginx edge.
+# See runbooks/05-ssl-with-caddy.md. Prefer Caddy over the plain-HTTP proxy here.
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: kehilapp
+
+services:
+  mongo:
+    image: mongo:7
+    restart: always
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks: [kehilnet]
+
+  backend:
+    image: ${REGISTRY:-ghcr.io/OWNER}/kehilapp-backend:${TAG:-latest}
+    restart: always
+    environment:
+      NODE_ENV: production
+      PORT: "5001"
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      # Self-hosted Mongo on the same box by default. To use Atlas, put the full
+      # SRV connection string in the server .env and it overrides this line.
+      MONGO_URI: ${MONGO_URI:-mongodb://mongo:27017/kehilapp}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in the server .env}
+      BUCKET_NAME: ${BUCKET_NAME}
+      BUCKET_REGION: ${BUCKET_REGION}
+      BUCKET_ACCESS_KEY: ${BUCKET_ACCESS_KEY}
+      BUCKET_SECRET_ACCESS_KEY: ${BUCKET_SECRET_ACCESS_KEY}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
+      COOKIE_SECURE: "true"      # cookies only over HTTPS in production
+    depends_on:
+      mongo:
+        condition: service_healthy
+    networks: [kehilnet]
+
+  frontend:
+    image: ${REGISTRY:-ghcr.io/OWNER}/kehilapp-frontend:${TAG:-latest}
+    restart: always
+    volumes:
+      - ./docker/nginx/spa.nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    networks: [kehilnet]
+
+  admin:
+    image: ${REGISTRY:-ghcr.io/OWNER}/kehilapp-admin:${TAG:-latest}
+    restart: always
+    volumes:
+      - ./docker/nginx/spa.nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    networks: [kehilnet]
+
+  # Internal path-routing edge (private). Caddy sits in front of THIS.
+  proxy:
+    image: nginx:1.27-alpine
+    restart: always
+    volumes:
+      - ./docker/nginx/reverse-proxy.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on: [backend, frontend, admin]
+    networks: [kehilnet]
+
+  # Public TLS terminator. Reads Caddyfile → gets/renews certs automatically.
+  caddy:
+    image: caddy:2-alpine
+    restart: always
+    environment:
+      # Injected into the container so the Caddyfile's {$DOMAIN}/{$ACME_EMAIL}
+      # resolve. Values come from the server .env (see .env.example).
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data       # persisted certs — do NOT delete or you re-issue
+      - caddy_config:/config
+    depends_on: [proxy]
+    networks: [kehilnet]
+
+volumes:
+  mongo_data:
+  caddy_data:
+  caddy_config:
+
+networks:
+  kehilnet:
+    driver: bridge

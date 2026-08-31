@@ -1,0 +1,98 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# LOCAL full-stack — one command brings up the whole system on your machine.
+#
+#     cp .env.example .env      # then fill in JWT_SECRET etc.
+#     docker compose up --build
+#
+# Open:  http://localhost:8080          (public site)
+#        http://localhost:8080/admin    (admin panel)
+#        http://localhost:8080/api/healthz  → {"status":"ok"}
+#
+# This file BUILDS the images from the sibling app repos (../kehilapp-*).
+# For the server we use docker-compose.prod.yml, which PULLS pre-built images.
+#
+# The reverse proxy is the ONLY service that publishes a port. Everything else
+# talks over the private `kehilnet` network — mongo and the backend are never
+# exposed to your host directly (safer, and closer to how prod works).
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: kehilapp
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+    # No published ports: only the backend (on the same network) can reach it.
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks: [kehilnet]
+
+  backend:
+    build:
+      context: ../kehilapp-backend-hardened
+      dockerfile: ../kehilapp-devops/docker/backend.Dockerfile
+    image: kehilapp-backend:local
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: "5001"
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      MONGO_URI: mongodb://mongo:27017/kehilapp
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      BUCKET_NAME: ${BUCKET_NAME:-local-bucket}
+      BUCKET_REGION: ${BUCKET_REGION:-eu-central-1}
+      BUCKET_ACCESS_KEY: ${BUCKET_ACCESS_KEY:-}
+      BUCKET_SECRET_ACCESS_KEY: ${BUCKET_SECRET_ACCESS_KEY:-}
+      # Browser talks to the proxy origin; the API is same-origin under /api.
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8080}
+      COOKIE_SECURE: "false"     # plain HTTP locally; set true behind HTTPS
+    depends_on:
+      mongo:
+        condition: service_healthy
+    networks: [kehilnet]
+
+  frontend:
+    build:
+      context: ../kehilapp-front-hardened
+      dockerfile: ../kehilapp-devops/docker/frontend.Dockerfile
+      args:
+        VITE_API_BASE_URL: /api
+    image: kehilapp-frontend:local
+    restart: unless-stopped
+    volumes:
+      - ./docker/nginx/spa.nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    networks: [kehilnet]
+
+  admin:
+    build:
+      context: ../kehilapp-admin-hardened
+      dockerfile: ../kehilapp-devops/docker/admin.Dockerfile
+      args:
+        VITE_API_BASE_URL: /api
+    image: kehilapp-admin:local
+    restart: unless-stopped
+    volumes:
+      - ./docker/nginx/spa.nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    networks: [kehilnet]
+
+  proxy:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "8080:80"          # host:container — the only door into the stack
+    volumes:
+      - ./docker/nginx/reverse-proxy.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on: [backend, frontend, admin]
+    networks: [kehilnet]
+
+volumes:
+  mongo_data:
+
+networks:
+  kehilnet:
+    driver: bridge

@@ -1,0 +1,30 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Caddyfile — the PUBLIC entry point in production (ports 80/443).
+#
+# WHY Caddy: it fetches and auto-renews a free Let's Encrypt HTTPS certificate
+# for your domain with zero extra config, then reverse-proxies to the internal
+# nginx edge (the `proxy` service) which does the path routing. You get HTTPS
+# "for free" and never touch certbot.
+#
+# {$DOMAIN} and {$ACME_EMAIL} are read from the server .env at container start
+# (docker compose passes them in — see .env.example). If DOMAIN is empty this
+# falls back to :80 plain HTTP so you can test by IP before DNS is ready.
+# ─────────────────────────────────────────────────────────────────────────────
+
+{
+	# Email Let's Encrypt uses for expiry notices. Set ACME_EMAIL in .env.
+	email {$ACME_EMAIL}
+}
+
+# The real site: HTTPS on your domain, certificate handled automatically.
+{$DOMAIN} {
+	encode zstd gzip
+	# Hand everything to the internal nginx edge, which routes /, /admin, /api.
+	reverse_proxy proxy:80
+}
+
+# Fallback so the box still answers over plain HTTP by IP before you set DOMAIN.
+# Safe to leave in: once DOMAIN is set, Caddy also redirects :80 → :443 for it.
+:80 {
+	reverse_proxy proxy:80
+}
