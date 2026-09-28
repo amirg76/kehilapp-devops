@@ -1,9 +1,15 @@
 # 02 — Deploying a new version
 
 Two steps: **build** (GitHub Actions, on demand) and **deploy** (manual, on the
-server). An earlier version of this page described a `deploy.yml` that tested,
-built and SSH-deployed on every push. That workflow never existed; do not look
-for it.
+server).
+
+About `deploy.yml`, which this page used to describe as the automatic path: it
+exists, ran once on 2026-08-31, and failed — it checks out a repo named
+`kehilapp-backend-hardened`, which is the local folder name, not the GitHub
+repo. It builds only the backend, for arm64, and its SSH jobs need secrets that
+were never created. It is parked on manual trigger (see the note at the top of
+the file). The secrets list at the end of this page belongs to it, for the day
+there is a server.
 
 ## Step 1 — Build the images (GitHub Actions)
 

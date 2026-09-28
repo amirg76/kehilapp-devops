@@ -1,4 +1,21 @@
 # ═════════════════════════════════════════════════════════════════════════════
+# STATUS (2026-09-28): PARKED — runs only from the "Run workflow" button.
+#
+# This workflow ran once, on 2026-08-31, and failed: it checked out a repo
+# named kehilapp-backend-hardened, which does not exist on GitHub (the public
+# repo is kehilapp-backend; the "-hardened" suffix is the local folder name).
+# It has never produced an image or a deploy. Three more things about it are
+# stale: it builds ONLY the backend (compose pulls three images), it builds for
+# linux/arm64 (the AWS Graviton plan — the chosen server, netcup, is x86), and
+# its SSH jobs need secrets that were never created because no server exists.
+#
+# Building is now done by build-images.yml (all three images, x86). This file
+# is kept for the SSH-deploy jobs, which are still the right shape once there
+# is a server; it was taken off the push trigger so it stops failing on every
+# merge to main in the meantime. Deleting it is a decision for the owner.
+#
+# Original description follows.
+# ─────────────────────────────────────────────────────────────────────────────
 # CI/CD — build, test, and deploy the kehilapp backend image to the EC2 box.
 #
 # The flow (top to bottom):
@@ -22,11 +39,10 @@
 
 name: deploy
 
-# WHEN does this run?
+# WHEN does this run? Manually only — see STATUS at the top. It used to run on
+# every push to main/develop and failed each time.
 on:
-  push:
-    branches: [main, develop]
-  workflow_dispatch: {} # ...and a manual "Run workflow" button in the Actions tab.
+  workflow_dispatch: {}
 
 # GHCR image name is derived from the repo owner. Lowercased at use.
 env:
@@ -61,7 +77,7 @@ jobs:
         with:
           # The backend source lives in a SEPARATE repo from this devops repo.
           # Adjust owner/name to your actual backend repo path.
-          repository: ${{ github.repository_owner }}/kehilapp-backend-hardened
+          repository: ${{ github.repository_owner }}/kehilapp-backend
           # A PAT in secrets.BACKEND_REPO_TOKEN is only needed if that repo is
           # private. For a public repo you can delete the `token:` line.
           token: ${{ secrets.BACKEND_REPO_TOKEN || github.token }}
@@ -96,7 +112,7 @@ jobs:
       - name: Check out backend source into ./app
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository_owner }}/kehilapp-backend-hardened
+          repository: ${{ github.repository_owner }}/kehilapp-backend
           token: ${{ secrets.BACKEND_REPO_TOKEN || github.token }}
           path: app
 

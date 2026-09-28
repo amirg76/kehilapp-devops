@@ -22,3 +22,7 @@ id_rsa*
 # OS / editor noise
 .DS_Store
 .vscode/
+
+# Logs — a docker compose logs dump saved next to the compose file would
+# carry the backend's request log. Nothing of the sort is tracked today.
+*.log
