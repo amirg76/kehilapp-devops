@@ -21,9 +21,17 @@ WORKDIR /app
 
 # Vite bakes API URLs into the bundle AT BUILD TIME. Anything the app reads as
 # import.meta.env.VITE_* must be passed here as a build arg, not at runtime.
-# Override per environment:  --build-arg VITE_API_BASE_URL=https://api.example.com
-ARG VITE_API_BASE_URL=/api
-ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
+#
+# The variable this app reads is VITE_REACT_APP_BASE_URL (src/utils/envUtils.js).
+# This file used to pass VITE_API_BASE_URL — a name the app never reads — so
+# the bundle fell back to localhost. Since 24.9 the build refuses to run
+# without a valid value (src/utils/baseUrl.js), which is how this was caught.
+#
+# "/" = same origin as the page: the reverse proxy routes /api/... to the API,
+# so one image serves any domain. Override only when the API lives on another
+# host:  --build-arg VITE_REACT_APP_BASE_URL=https://api.example.com/
+ARG VITE_REACT_APP_BASE_URL=/
+ENV VITE_REACT_APP_BASE_URL=${VITE_REACT_APP_BASE_URL}
 
 COPY package.json package-lock.json ./
 RUN npm ci

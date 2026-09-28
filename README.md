@@ -19,7 +19,7 @@ new code ships (GitHub Actions), and the step-by-step guides to run it all
 | `docker-compose.prod.yml` | **The server version** — it *pulls* pre-built images (from GHCR) instead of building, and adds Caddy for automatic HTTPS. Why: the server stays dumb and fast — pull image, restart. | גרסת השרת — מושכת images מוכנים ומוסיפה Caddy ל-HTTPS אוטומטי. |
 | `.env.example` | Template for the **one secrets/config file** the stack reads. Copy to `.env` (never committed). | תבנית לקובץ הסודות היחיד. |
 | `terraform/` | **Creates the AWS server** (one EC2 box + firewall + fixed IP + SSH key) as code. Why: reproducible, reviewable, and `terraform destroy` stops the bill instantly. | יוצר את שרת ה-AWS כקוד. |
-| `.github/workflows/deploy.yml` | **CI/CD** — on every push it tests the backend, builds a Docker image, and SSHes in to deploy. Why: no manual, error-prone deploys. | בונה, בודק ומעלה לאוויר אוטומטית. |
+| `.github/workflows/build-images.yml` | **Builds the three images and pushes them to GHCR** — on demand (Actions → Run workflow) and when the Docker files change. Deploying is a manual `pull` + `up` on the server (runbook 02). An earlier README described a `deploy.yml` that tested, built and SSH-deployed; that file never existed. | בונה את שלוש התמונות ומעלה למאגר. הפריסה עצמה ידנית (מדריך 02). |
 | `runbooks/` | **Exact command guides** for setup, deploy, rollback, logs, SSL, SSH. Why: 2am incidents shouldn't need improvisation. | מדריכי פקודות מדויקים. |
 | `COST-ESTIMATE.md` | Detailed monthly $ for dev + prod. | הערכת עלות חודשית. |
 
@@ -84,7 +84,45 @@ docker compose up --build
 #   http://localhost:8080/api/healthz  -> {"status":"ok"}
 ```
 
-### B) Dev on AWS
+### Where this actually runs (decided 2026-09-28)
+
+The demo lives on **one shared VPS (netcup, 16 GB) together with the owner's
+other projects** — not on its own AWS box. See the decision record
+`D-ORC-06` in the decisions registry. What that means for this repo:
+
+- `terraform/` is kept as a **worked example of infrastructure-as-code**. It is
+  not the demo's host. `apply` → verify → `destroy` is the intended use.
+- `docker-compose.prod.yml` is what runs on the shared box. Its Caddy binds
+  ports 80/443; on a box shared with other stacks that is a decision to make
+  first (one shared entry point, or a Cloudflare Tunnel with no open ports —
+  the sibling `career-flow-ai/infra` already uses the tunnel).
+- The database is **MongoDB Atlas**, database `kehilapp_demo`: put the SRV
+  string in the server `.env` as `MONGO_URI`, and allow the server's address in
+  Atlas → Network Access. The self-hosted `mongo` service is a fallback only;
+  note `scripts/seedDemo.js` refuses to seed a database not named `*_demo`.
+
+**Server `.env` — the full list the backend reads today** (`.env.example` in
+this repo predates several of these):
+
+| Variable | Required | What it is |
+|---|---|---|
+| `NODE_ENV` | set by compose | `production` |
+| `MONGO_URI` | yes | Atlas SRV string, database `kehilapp_demo` |
+| `JWT_SECRET` | yes | long random string; rotate = everyone logs in again |
+| `APP_BASE_URL` | **yes** | the public site origin, e.g. `https://kehilapp.example.com` — where the email verification link points. The server refuses to boot without it |
+| `ALLOWED_ORIGINS` | yes | comma-separated origins allowed to call the API with cookies: the site, and the admin panel if on another origin |
+| `EMAIL_PROVIDER` | yes (`resend`) | without a provider nobody can finish registration |
+| `RESEND_API_KEY`, `MAIL_FROM` | yes | Resend key; sender on a domain verified in Resend |
+| `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | optional | AI category suggestion in the admin panel; set a spend cap at Anthropic |
+| `TRUST_PROXY_HOPS` | set by compose | `2` for Caddy → nginx → backend |
+| `BUCKET_*` (4) | yes | S3 for attachments; placeholders keep everything else working |
+| `DOMAIN`, `ACME_EMAIL` | yes | for Caddy's certificate |
+| `REGISTRY`, `TAG` | yes | `ghcr.io/amirg76`, `latest` or a short SHA |
+
+Never set `EXPOSE_VERIFICATION_LINK` on a server: the backend refuses to boot
+with it in production, on purpose.
+
+### B) Dev on AWS (kept as an example — see above)
 
 ```bash
 # 1. one-time prerequisites

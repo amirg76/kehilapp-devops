@@ -1,23 +1,23 @@
 # 02 — Deploying a new version
 
-There are two ways: **automatic** (normal) and **manual** (when CI is down or
-you're testing).
+Two steps: **build** (GitHub Actions, on demand) and **deploy** (manual, on the
+server). An earlier version of this page described a `deploy.yml` that tested,
+built and SSH-deployed on every push. That workflow never existed; do not look
+for it.
 
-## Automatic (recommended)
+## Step 1 — Build the images (GitHub Actions)
 
-The pipeline in `.github/workflows/deploy.yml` does everything:
+`.github/workflows/build-images.yml` builds the backend, frontend and admin
+images from each app repo's `main` and pushes them to GHCR, tagged `latest`
+and with this repo's short commit SHA.
 
-| You push to… | CI does… | Lands on… |
-|--------------|----------|-----------|
-| `develop`    | test → build image `:dev` → SSH deploy | the **dev** box |
-| `main`       | test → build image `:latest` → SSH deploy | the **prod** box |
+- Runs on **Actions → Build images → Run workflow** (optional extra tag), and
+  automatically when anything under `docker/` changes on `main`.
+- It does **not** run when an app repo changes. After merging app code, run it
+  by hand. Each app repo's own CI has already tested that code.
 
-```bash
-git checkout develop && git push     # ships to dev
-# open a PR develop → main, merge     # ships to prod
-```
-
-Watch it in the repo's **Actions** tab. A red `test` job means nothing shipped.
+Watch it in the **Actions** tab. A red job means no image was pushed for that
+service; the others are unaffected.
 For prod you can add a required reviewer on the GitHub `prod` environment so a
 human clicks "approve" before it deploys.
 

@@ -48,6 +48,33 @@ services:
       BUCKET_SECRET_ACCESS_KEY: ${BUCKET_SECRET_ACCESS_KEY}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
       COOKIE_SECURE: "true"      # cookies only over HTTPS in production
+      # ── Added 2026-09-28: everything the server has learned to read since
+      #    this file was written (31.8). Each `:?` one makes `compose up` stop
+      #    with the message instead of the server refusing to boot later.
+      #
+      # Where the /verify-email link in every email points: the PUBLIC SITE's
+      # origin, not this API. The server refuses to start without it in
+      # production, because the default would mail strangers a localhost link.
+      APP_BASE_URL: ${APP_BASE_URL:?set APP_BASE_URL to the public site origin, e.g. https://kehilapp.example.com}
+      # Real mail. Without a provider the link is only written to the log and
+      # nobody can finish registration.
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-resend}
+      RESEND_API_KEY: ${RESEND_API_KEY:?set RESEND_API_KEY (Resend dashboard)}
+      MAIL_FROM: ${MAIL_FROM:?set MAIL_FROM, an address on a domain verified in Resend}
+      # AI category/urgency suggestion in the admin panel. Optional: without a
+      # key the button reports that the feature is off. Set a spend cap at
+      # Anthropic as well — the per-account limiter here is the only other one.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-}
+      # Client → Caddy → nginx "proxy" → backend = TWO proxies. Every rate limiter
+      # keys on the client address, and the address is read from X-Forwarded-For
+      # by skipping this many trusted hops. With 1 (the old hard-coded value)
+      # every client resolved to Caddy's address and ten wrong passwords from
+      # anyone locked everyone out. Change this if you change the chain.
+      TRUST_PROXY_HOPS: "2"
+      # Never set EXPOSE_VERIFICATION_LINK here: the server refuses to boot with
+      # it in production, and rightly so — it returns verification tokens to
+      # whoever asks.
     depends_on:
       mongo:
         condition: service_healthy
