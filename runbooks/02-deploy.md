@@ -24,7 +24,7 @@ and with this repo's short commit SHA.
 Watch it in the **Actions** tab. A red job means no image was pushed for that
 service; the others are unaffected.
 
-## Step 2b — Deploy to the AWS showcase box (`deploy (AWS showcase)` workflow)
+## Step 3 — Deploy to the AWS showcase box (`deploy (AWS showcase)` workflow)
 
 Only for the demonstration run: after `terraform apply`, before `destroy`.
 
@@ -33,13 +33,20 @@ One-time, Repo → Settings → Environments → **aws-showcase** → secrets:
 - `SSH_USER` — `ubuntu`
 - `SSH_PRIVATE_KEY` — the **private** key text of the pair Terraform uploaded
 - `SSH_PORT` — optional, defaults to 22
+- `SSH_FINGERPRINT` — recommended: `ssh-keyscan -t ed25519 <ip>` right after
+  `apply`, then the fingerprint (`ssh-keygen -lf`). Without it the workflow
+  trusts whatever answers on that IP — and after destroy + apply the IP is new.
+
+The environment must be **created** (it does not exist yet) with a required
+reviewer, so a run waits for a click. The `tag` input is validated on the
+runner and passed to the box as a variable, never pasted into the script.
 
 Then Actions → **deploy (AWS showcase)** → Run workflow → tag (`latest` or a
 short SHA from a build-images run). It pulls, restarts, and checks `/readyz`
 from inside the docker network. The box must already have `/opt/kehilapp`
 with the compose file and a filled `.env` (runbook 01).
 
-## Step 2a — Deploy to the netcup demo box (by hand, on the box)
+## Step 2 — Deploy to the netcup demo box (by hand, on the box)
 
 ```bash
 ssh -i ~/.ssh/kehilapp ubuntu@<IP>

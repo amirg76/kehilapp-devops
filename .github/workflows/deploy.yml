@@ -18,12 +18,16 @@
 # so this file is only the SSH deploy, run by hand against the box Terraform
 # just created.
 #
-# SECRETS (Repo → Settings → Environments → "aws-showcase"), set after
+# SECRETS (Repo → Settings → Environments → "aws-showcase" — CREATE IT, with a
+# required reviewer, before the first run; it does not exist yet), set after
 # `terraform apply`, from its outputs:
 #   SSH_HOST          public IP of the box     (terraform output public_ip)
 #   SSH_USER          ubuntu
 #   SSH_PRIVATE_KEY   the PRIVATE half of the key pair Terraform uploaded
 #   SSH_PORT          optional, defaults to 22
+#   SSH_FINGERPRINT   optional but recommended: `ssh-keyscan <ip>` after apply.
+#                     Without it the action accepts whatever host answers on
+#                     that IP — and after destroy + apply the IP is new.
 # The box itself needs /opt/kehilapp with docker-compose.prod.yml and a filled
 # .env — runbooks/01-initial-server-setup.md.
 # ═════════════════════════════════════════════════════════════════════════════
@@ -47,7 +51,23 @@ jobs:
     # A GitHub environment: holds the SSH secrets and can require a click of
     # approval before the job runs.
     environment: aws-showcase
+    # The input reaches every step as an environment variable and NEVER as
+    # text pasted into a script. The first version of this job wrote
+    # `export TAG='${{ inputs.tag }}'` inside the remote script: one quote in
+    # the input closed the string and the rest ran as commands on the server.
+    # Merge-gate finding, 29.9. `${{ }}` is expanded by GitHub before the
+    # shell sees anything; an `env:` value is just a variable's contents.
+    env:
+      DEPLOY_TAG: ${{ github.event.inputs.tag }}
     steps:
+      # Refuse anything that is not a plain image tag before touching the box.
+      - name: Validate the tag
+        run: |
+          if [[ ! "$DEPLOY_TAG" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]]; then
+            echo "tag must be a plain image tag (letters, digits, . _ -), got: $DEPLOY_TAG"
+            exit 1
+          fi
+
       - name: Pull the requested tag and restart the stack
         uses: appleboy/ssh-action@v1
         with:
@@ -55,11 +75,14 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SSH_PORT || 22 }}
+          fingerprint: ${{ secrets.SSH_FINGERPRINT }}
+          # Forwards the validated variable to the remote shell by name.
+          envs: DEPLOY_TAG
           script: |
             set -e
             cd /opt/kehilapp
             git pull --ff-only || true          # refresh compose/nginx/caddy configs
-            export TAG='${{ github.event.inputs.tag }}'
+            export TAG="$DEPLOY_TAG"
             export REGISTRY=ghcr.io/${{ github.repository_owner }}
             docker compose -f docker-compose.prod.yml --env-file .env pull
             docker compose -f docker-compose.prod.yml --env-file .env up -d
@@ -72,6 +95,7 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SSH_PORT || 22 }}
+          fingerprint: ${{ secrets.SSH_FINGERPRINT }}
           script: |
             # Give it a few seconds, then confirm the backend is ready. Only
             # Caddy (80/443) is published, so probe the backend from INSIDE the

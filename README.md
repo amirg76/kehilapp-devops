@@ -151,7 +151,7 @@ terraform output ssh_command                    # how to log in
 # 3. first-boot setup on the box  → runbooks/01-initial-server-setup.md
 #    (add /opt/kehilapp/.env, then docker compose ... up -d)
 
-# 4. deploy: Actions → "deploy (AWS showcase)" → Run workflow (runbook 02, step 2b)
+# 4. deploy: Actions → "deploy (AWS showcase)" → Run workflow (runbook 02, step 3)
 # 5. verify, record, then:  terraform destroy -var-file="dev.tfvars"
 ```
 
@@ -167,7 +167,7 @@ terraform apply -var-file="prod.tfvars"
 # point DNS A-record at:  terraform output public_ip
 # first-boot setup:       runbooks/01-initial-server-setup.md
 # HTTPS is automatic via Caddy once DNS resolves → runbooks/05-ssl-with-caddy-or-certbot.md
-# deploy: Actions → "deploy (AWS showcase)" → Run workflow (runbook 02, step 2b)
+# deploy: Actions → "deploy (AWS showcase)" → Run workflow (runbook 02, step 3)
 # (the "prod" workspace is part of the worked example; the real always-on demo is on netcup)
 ```
 

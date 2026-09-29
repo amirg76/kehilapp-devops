@@ -16,7 +16,12 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 # ── Stage 1: build the static bundle ────────────────────────────────────────
-FROM node:20-alpine AS build
+# --platform=$BUILDPLATFORM: this stage only produces static files, which are
+# the same for every CPU, so it runs on the builder's own architecture instead
+# of under QEMU emulation when build-images.yml builds the arm64 variant
+# (emulated Node builds are many times slower and can time out). Only the
+# nginx stage below is built per target platform.
+FROM --platform=$BUILDPLATFORM node:20-alpine AS build
 WORKDIR /app
 
 # Vite bakes API URLs into the bundle AT BUILD TIME. Anything the app reads as

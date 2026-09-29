@@ -10,7 +10,9 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 # ── Stage 1: build ──────────────────────────────────────────────────────────
-FROM node:20-alpine AS build
+# --platform=$BUILDPLATFORM: static output, same for every CPU — see
+# frontend.Dockerfile for why this avoids QEMU emulation on arm64 builds.
+FROM --platform=$BUILDPLATFORM node:20-alpine AS build
 WORKDIR /app
 
 # VITE_API_BASE_URL: where the API is. The admin's own request paths already
