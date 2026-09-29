@@ -6,7 +6,7 @@
 #
 # Open:  http://localhost:8080          (public site)
 #        http://localhost:8080/admin    (admin panel)
-#        http://localhost:8080/api/healthz  → {"status":"ok"}
+#        http://localhost:8080/healthz  → {"status":"ok"}
 #
 # This file BUILDS the images from the sibling app repos (../kehilapp-*).
 # For the server we use docker-compose.prod.yml, which PULLS pre-built images.

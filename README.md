@@ -81,7 +81,7 @@ docker compose up --build
 # open:
 #   http://localhost:8080            public site
 #   http://localhost:8080/admin      admin panel
-#   http://localhost:8080/api/healthz  -> {"status":"ok"}
+#   http://localhost:8080/healthz  -> {"status":"ok"}
 ```
 
 ### Where this actually runs (decided 2026-09-28)

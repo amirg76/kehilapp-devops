@@ -80,7 +80,7 @@ docker compose -f docker-compose.prod.yml ps      # all should be "running/healt
 docker compose -f docker-compose.prod.yml exec -T backend wget -qO- http://127.0.0.1:5001/readyz
 # From your laptop, once DNS + cert are ready:
 curl -I https://your-domain/            # 200/301
-curl https://your-domain/api/healthz    # {"status":"ok"}
+curl https://your-domain/healthz    # {"status":"ok"}
 ```
 
 Done. From now on, deploys are automatic via CI (see `02-deploy.md`).

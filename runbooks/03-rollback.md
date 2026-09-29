@@ -37,7 +37,7 @@ docker compose -f docker-compose.prod.yml --env-file .env up -d backend
 
 ```bash
 docker compose -f docker-compose.prod.yml exec -T backend wget -qO- http://127.0.0.1:5001/readyz
-curl https://your-domain/api/healthz
+curl https://your-domain/healthz
 docker compose -f docker-compose.prod.yml logs --tail=50 backend
 ```
 

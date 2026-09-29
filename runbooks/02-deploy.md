@@ -24,6 +24,22 @@ and with this repo's short commit SHA.
 Watch it in the **Actions** tab. A red job means no image was pushed for that
 service; the others are unaffected.
 
+## Step 2 — Deploy to the netcup demo box (by hand, on the box)
+
+```bash
+ssh -i ~/.ssh/kehilapp ubuntu@<IP>
+cd /opt/kehilapp
+git pull --ff-only                    # refresh compose/nginx/caddy configs
+
+# Pick the image tag you want:
+export REGISTRY=ghcr.io/<owner-lowercase>
+export TAG=latest                     # or dev, or a specific 7-char git sha
+
+docker compose -f docker-compose.prod.yml --env-file .env pull
+docker compose -f docker-compose.prod.yml --env-file .env up -d
+docker image prune -f                 # free disk from the old image
+```
+
 ## Step 3 — Deploy to the AWS showcase box (`deploy (AWS showcase)` workflow)
 
 Only for the demonstration run: after `terraform apply`, before `destroy`.
@@ -46,28 +62,12 @@ short SHA from a build-images run). It pulls, restarts, and checks `/readyz`
 from inside the docker network. The box must already have `/opt/kehilapp`
 with the compose file and a filled `.env` (runbook 01).
 
-## Step 2 — Deploy to the netcup demo box (by hand, on the box)
-
-```bash
-ssh -i ~/.ssh/kehilapp ubuntu@<IP>
-cd /opt/kehilapp
-git pull --ff-only                    # refresh compose/nginx/caddy configs
-
-# Pick the image tag you want:
-export REGISTRY=ghcr.io/<owner-lowercase>
-export TAG=latest                     # or dev, or a specific 7-char git sha
-
-docker compose -f docker-compose.prod.yml --env-file .env pull
-docker compose -f docker-compose.prod.yml --env-file .env up -d
-docker image prune -f                 # free disk from the old image
-```
-
 ## Verify the deploy
 
 ```bash
 docker compose -f docker-compose.prod.yml ps
 docker compose -f docker-compose.prod.yml exec -T backend wget -qO- http://127.0.0.1:5001/readyz
-curl https://your-domain/api/healthz
+curl https://your-domain/healthz
 ```
 
 ## Deploy a specific version (pin a SHA)
