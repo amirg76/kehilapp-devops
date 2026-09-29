@@ -34,6 +34,11 @@ services:
   backend:
     image: ${REGISTRY:-ghcr.io/OWNER}/kehilapp-backend:${TAG:-latest}
     restart: always
+    # Docker's own init (tini) as PID 1: reaps zombies and forwards signals so
+    # `docker stop` shuts Node down cleanly. The image no longer installs tini
+    # itself — that RUN step was the one thing keeping its arm64 build from
+    # working without QEMU (see docker/backend.Dockerfile).
+    init: true
     environment:
       NODE_ENV: production
       PORT: "5001"

@@ -69,7 +69,7 @@ jobs:
           fi
 
       - name: Pull the requested tag and restart the stack
-        uses: appleboy/ssh-action@v1
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
@@ -89,7 +89,7 @@ jobs:
             docker image prune -f               # reclaim disk from old images
 
       - name: Smoke-check /readyz
-        uses: appleboy/ssh-action@v1
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}

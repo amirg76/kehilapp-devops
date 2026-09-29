@@ -1,6 +1,10 @@
 # Copy this file into EACH app repo as `.dockerignore` (next to package.json).
 # It keeps junk out of the build context → smaller, faster, safer images.
 # The single most important line is `.env` — never bake secrets into an image.
+#
+# Patterns match from the context ROOT. `*.md` matches only root-level files;
+# `**/*.md` matches at any depth. (Measured 29.9: with `*.md` alone the backend
+# image still carried docs/*.md, src/test and the jest config.)
 
 node_modules
 npm-debug.log
@@ -8,6 +12,7 @@ npm-debug.log
 .env.*
 !.env.example
 .git
+.github
 .gitignore
 Dockerfile
 .dockerignore
@@ -16,7 +21,19 @@ dist
 build
 .vscode
 .idea
-*.md
+**/*.md
+
+# Tests and test/lint tooling — never needed at runtime.
+**/*.test.js
+**/*.int.test.js
+**/test
+jest.config.*
+jest.*.js
+jest.*.cjs
+.babelrc
+.eslintrc*
+.prettierrc*
+nodemon.json
 e2e
 playwright-report
 test-results

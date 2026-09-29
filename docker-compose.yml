@@ -38,6 +38,7 @@ services:
       dockerfile: ../kehilapp-devops/docker/backend.Dockerfile
     image: kehilapp-backend:local
     restart: unless-stopped
+    init: true   # PID 1 = docker-init (tini); see docker-compose.prod.yml
     environment:
       NODE_ENV: production
       PORT: "5001"
