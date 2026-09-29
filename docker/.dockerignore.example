@@ -3,27 +3,43 @@
 # The single most important line is `.env` — never bake secrets into an image.
 #
 # Patterns match from the context ROOT. `*.md` matches only root-level files;
-# `**/*.md` matches at any depth. (Measured 29.9: with `*.md` alone the backend
-# image still carried docs/*.md, src/test and the jest config.)
+# `**/*.md` matches at any depth. (Measured 29.9 on the backend image: with
+# `*.md` alone it still carried docs/*.md and the test files.)
+#
+# The same file serves all three repos, so some lines are no-ops in a given
+# one (a Vite app has no jest config; that is fine).
 
-node_modules
-npm-debug.log
+# Secrets and anything that could carry one. `.env.example` is the documented
+# template and is allowed back in.
 .env
 .env.*
 !.env.example
+*.pem
+*.key
+id_rsa*
+secrets
+**/*.log
+
+# Version control, editor and Docker's own files
 .git
 .github
 .gitignore
 Dockerfile
 .dockerignore
+.vscode
+.idea
+
+# Build outputs and dependencies — the image installs its own
+node_modules
+npm-debug.log
 coverage
 dist
 build
-.vscode
-.idea
+
+# Documentation
 **/*.md
 
-# Tests and test/lint tooling — never needed at runtime.
+# Tests and test/lint tooling — never needed at runtime
 **/*.test.js
 **/*.int.test.js
 **/test

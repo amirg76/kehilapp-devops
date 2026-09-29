@@ -46,7 +46,10 @@ ENV NODE_ENV=production
 WORKDIR /app
 
 # SECURITY: never run as root. node:alpine ships a pre-made "node" user
-# (uid 1000). Files are copied already owned by it — no chown step needed.
+# (uid 1000). Everything under /app is copied already owned by it; /app itself
+# stays root-owned (WORKDIR made it), which is fine — the process only reads.
+# Running the container outside compose? Add `--init` to `docker run`: this
+# image has no init of its own.
 # Bring in the already-installed node_modules from the deps stage…
 COPY --chown=node:node --from=deps /app/node_modules ./node_modules
 # …then the application source. .dockerignore keeps .env/tests/docs out.
