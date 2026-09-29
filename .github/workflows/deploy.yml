@@ -44,6 +44,11 @@ name: deploy
 on:
   workflow_dispatch: {}
 
+# Least privilege for every job; the build job raises `packages: write` for
+# itself. Without this line the test/deploy jobs got the repo default.
+permissions:
+  contents: read
+
 # GHCR image name is derived from the repo owner. Lowercased at use.
 env:
   REGISTRY: ghcr.io

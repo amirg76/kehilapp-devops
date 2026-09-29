@@ -19,6 +19,14 @@
 # The real site: HTTPS on your domain, certificate handled automatically.
 {$DOMAIN} {
 	encode zstd gzip
+	# HSTS belongs here, on the TLS terminator, not in nginx: it tells browsers
+	# to refuse plain HTTP for this host for a year. Caddy does not add it by
+	# itself. The other security headers (CSP, X-Frame-Options, …) are set by
+	# nginx (docker/nginx/spa.nginx.conf) where the HTML is served.
+	# NOT TESTED HERE — this machine has no Docker; verify with
+	#   curl -sI https://$DOMAIN | grep -i strict
+	# after the first deploy.
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
 	# Hand everything to the internal nginx edge, which routes /, /admin, /api.
 	reverse_proxy proxy:80
 }
