@@ -43,8 +43,10 @@ docker compose -f docker-compose.prod.yml logs --tail=50 backend
 
 ## 4. Make the rollback stick
 
-The next push to `main`/`develop` would redeploy the moving tag again. So after
-rolling back, also **revert the bad commit** in git so CI can't reship it:
+Nothing deploys automatically any more (deploys are by hand, or the manual
+AWS showcase workflow), but the next `build-images` run re-tags `latest` from
+the app repos' `main`. So after rolling back, also **revert the bad commit**
+in the app repo so the next build can't reship it:
 ```bash
 git revert <bad-commit-sha>
 git push

@@ -78,6 +78,12 @@ jobs:
           path: app
           persist-credentials: false
 
+      # Two targets share these images (decision D-ORC-06 + ADR-1): the
+      # always-on demo on netcup (x86) and the Terraform showcase on AWS
+      # (t4g = ARM Graviton, terraform/variables.tf). QEMU lets one runner
+      # build both; a multi-arch manifest means `docker compose pull` on
+      # either box gets the right one without any change to the compose file.
+      - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
 
       - uses: docker/login-action@v3
@@ -101,6 +107,7 @@ jobs:
         with:
           context: app
           file: devops/${{ matrix.dockerfile }}
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

@@ -19,7 +19,7 @@ new code ships (GitHub Actions), and the step-by-step guides to run it all
 | `docker-compose.prod.yml` | **The server version** — it *pulls* pre-built images (from GHCR) instead of building, and adds Caddy for automatic HTTPS. Why: the server stays dumb and fast — pull image, restart. | גרסת השרת — מושכת images מוכנים ומוסיפה Caddy ל-HTTPS אוטומטי. |
 | `.env.example` | Template for the **one secrets/config file** the stack reads. Copy to `.env` (never committed). | תבנית לקובץ הסודות היחיד. |
 | `terraform/` | **Creates the AWS server** (one EC2 box + firewall + fixed IP + SSH key) as code. Why: reproducible, reviewable, and `terraform destroy` stops the bill instantly. | יוצר את שרת ה-AWS כקוד. |
-| `.github/workflows/build-images.yml` | **Builds the three images and pushes them to GHCR** — on demand (Actions → Run workflow) and when the Docker files change. Deploying is a manual `pull` + `up` on the server (runbook 02). `deploy.yml` (backend-only build + SSH deploy) ran once on 2026-08-31 and failed on a wrong repo name; it is parked on manual trigger until there is a server and secrets. | בונה את שלוש התמונות ומעלה למאגר. הפריסה עצמה ידנית (מדריך 02). `deploy.yml` מושהה. |
+| `.github/workflows/build-images.yml` | **Builds the three images and pushes them to GHCR** — on demand (Actions → Run workflow) and when the Docker files change. Deploying to the netcup demo is a manual `pull` + `up` on the server (runbook 02). `deploy.yml` is the **AWS showcase** deploy: run by hand after `terraform apply`, it SSHes into the new box and pulls the requested tag. | בונה את שלוש התמונות (לשני סוגי מעבד) ומעלה למאגר. הדמו הקבוע — פריסה ידנית (מדריך 02); `deploy.yml` — התקנה על שרת ההדגמה ב-AWS. |
 | `runbooks/` | **Exact command guides** for setup, deploy, rollback, logs, SSL, SSH. Why: 2am incidents shouldn't need improvisation. | מדריכי פקודות מדויקים. |
 | `COST-ESTIMATE.md` | Detailed monthly $ for dev + prod. | הערכת עלות חודשית. |
 
@@ -86,16 +86,27 @@ docker compose up --build
 
 ### Where this actually runs (decided 2026-09-28)
 
-The demo lives on **one shared VPS (netcup, 16 GB) together with the owner's
-other projects** — not on its own AWS box. See the decision record
-`D-ORC-06` in the decisions registry. What that means for this repo:
+Two targets, one set of images (decision `D-ORC-06` in the decisions
+registry, and ADR-1 in the orchestrator's build log):
 
-- `terraform/` is kept as a **worked example of infrastructure-as-code**. It is
-  not the demo's host. `apply` → verify → `destroy` is the intended use.
-- `docker-compose.prod.yml` is what runs on the shared box. Its Caddy binds
-  ports 80/443; on a box shared with other stacks that is a decision to make
-  first (one shared entry point, or a Cloudflare Tunnel with no open ports —
-  the sibling `career-flow-ai/infra` already uses the tunnel).
+1. **The always-on demo** — the link in a CV — runs on **one shared VPS
+   (netcup, 16 GB) together with the owner's other projects**. Deployed by
+   hand: `docker compose pull` + `up -d` (runbook 02).
+2. **The AWS showcase** — `terraform apply` creates a box, the manual
+   `deploy (AWS showcase)` workflow puts the app on it, you verify and record,
+   `terraform destroy` removes it. The evidence is the infrastructure code;
+   nothing stays running (and nothing keeps billing).
+
+What that means for this repo:
+
+- `build-images.yml` builds every image for **both** x86 (netcup) and arm64
+  (the AWS box is `t4g`, ARM Graviton — `terraform/variables.tf`), so either
+  box pulls the right one with the same compose file.
+- `docker-compose.prod.yml` is what runs on both. Its Caddy binds ports
+  80/443; on the SHARED netcup box that is a decision to make first (one
+  shared entry point, or a Cloudflare Tunnel with no open ports — the sibling
+  `career-flow-ai/infra` already uses the tunnel). On the AWS box it is fine
+  as is.
 - The database is **MongoDB Atlas**, database `kehilapp_demo`: put the SRV
   string in the server `.env` as `MONGO_URI`, and allow the server's address in
   Atlas → Network Access. The self-hosted `mongo` service is a fallback only;
@@ -140,7 +151,8 @@ terraform output ssh_command                    # how to log in
 # 3. first-boot setup on the box  → runbooks/01-initial-server-setup.md
 #    (add /opt/kehilapp/.env, then docker compose ... up -d)
 
-# 4. from now on: push to the `develop` branch → CI auto-deploys dev
+# 4. deploy: Actions → "deploy (AWS showcase)" → Run workflow (runbook 02, step 2b)
+# 5. verify, record, then:  terraform destroy -var-file="dev.tfvars"
 ```
 
 ### C) Prod on AWS
@@ -155,7 +167,8 @@ terraform apply -var-file="prod.tfvars"
 # point DNS A-record at:  terraform output public_ip
 # first-boot setup:       runbooks/01-initial-server-setup.md
 # HTTPS is automatic via Caddy once DNS resolves → runbooks/05-ssl-with-caddy-or-certbot.md
-# from now on: push to `main` → CI auto-deploys prod
+# deploy: Actions → "deploy (AWS showcase)" → Run workflow (runbook 02, step 2b)
+# (the "prod" workspace is part of the worked example; the real always-on demo is on netcup)
 ```
 
 **Order of the runbooks:** `01` setup → `02` deploy → `03` rollback (if needed)

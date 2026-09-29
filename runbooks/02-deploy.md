@@ -1,15 +1,14 @@
 # 02 — Deploying a new version
 
-Two steps: **build** (GitHub Actions, on demand) and **deploy** (manual, on the
-server).
+Two steps: **build** (GitHub Actions, on demand) and **deploy** — by hand on
+the netcup demo box, or through the `deploy (AWS showcase)` workflow on a box
+Terraform just created. Two targets, one set of images; see the README.
 
-About `deploy.yml`, which this page used to describe as the automatic path: it
-exists, ran once on 2026-08-31, and failed — it checks out a repo named
-`kehilapp-backend-hardened`, which is the local folder name, not the GitHub
-repo. It builds only the backend, for arm64, and its SSH jobs need secrets that
-were never created. It is parked on manual trigger (see the note at the top of
-the file). The secrets list at the end of this page belongs to it, for the day
-there is a server.
+About `deploy.yml`: its first version (31.8) tested, built and SSH-deployed on
+every push, ran once and failed on a wrong repo name. It is now only the AWS
+showcase deploy, run by hand: pick the tag, and it pulls and restarts on the
+box named in the `aws-showcase` environment secrets (listed at the top of the
+file). Building moved to `build-images.yml`.
 
 ## Step 1 — Build the images (GitHub Actions)
 
@@ -24,18 +23,23 @@ and with this repo's short commit SHA.
 
 Watch it in the **Actions** tab. A red job means no image was pushed for that
 service; the others are unaffected.
-For prod you can add a required reviewer on the GitHub `prod` environment so a
-human clicks "approve" before it deploys.
 
-### One-time secrets CI needs
-Repo → Settings → Secrets and variables → Actions (per environment):
-- `SSH_HOST_DEV` / `SSH_HOST_PROD` — the box IP (`terraform output public_ip`)
-- `SSH_USER_DEV` / `SSH_USER_PROD` — `ubuntu`
-- `SSH_PRIVATE_KEY_DEV` / `SSH_PRIVATE_KEY_PROD` — the **private** key text
-- `SSH_PORT_*` — optional, defaults to 22
-- `BACKEND_REPO_TOKEN` — only if the backend repo is private
+## Step 2b — Deploy to the AWS showcase box (`deploy (AWS showcase)` workflow)
 
-## Manual deploy (on the box)
+Only for the demonstration run: after `terraform apply`, before `destroy`.
+
+One-time, Repo → Settings → Environments → **aws-showcase** → secrets:
+- `SSH_HOST` — the box IP (`terraform output public_ip`)
+- `SSH_USER` — `ubuntu`
+- `SSH_PRIVATE_KEY` — the **private** key text of the pair Terraform uploaded
+- `SSH_PORT` — optional, defaults to 22
+
+Then Actions → **deploy (AWS showcase)** → Run workflow → tag (`latest` or a
+short SHA from a build-images run). It pulls, restarts, and checks `/readyz`
+from inside the docker network. The box must already have `/opt/kehilapp`
+with the compose file and a filled `.env` (runbook 01).
+
+## Step 2a — Deploy to the netcup demo box (by hand, on the box)
 
 ```bash
 ssh -i ~/.ssh/kehilapp ubuntu@<IP>
