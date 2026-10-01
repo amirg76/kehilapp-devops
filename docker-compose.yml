@@ -6,7 +6,7 @@
 #
 # Open:  http://localhost:8080          (public site)
 #        http://localhost:8080/admin    (admin panel)
-#        http://localhost:8080/api/healthz  → {"status":"ok"}
+#        http://localhost:8080/healthz  → {"status":"ok"}
 #
 # This file BUILDS the images from the sibling app repos (../kehilapp-*).
 # For the server we use docker-compose.prod.yml, which PULLS pre-built images.
@@ -38,6 +38,7 @@ services:
       dockerfile: ../kehilapp-devops/docker/backend.Dockerfile
     image: kehilapp-backend:local
     restart: unless-stopped
+    init: true   # PID 1 = docker-init (tini); see docker-compose.prod.yml
     environment:
       NODE_ENV: production
       PORT: "5001"
@@ -51,6 +52,17 @@ services:
       # Browser talks to the proxy origin; the API is same-origin under /api.
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8080}
       COOKIE_SECURE: "false"     # plain HTTP locally; set true behind HTTPS
+      # Where the /verify-email link points = the proxy origin. NODE_ENV is
+      # production above, and in production the server refuses to boot without
+      # this — so the local stack must set it too.
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8080}
+      # Locally there is ONE proxy (nginx) in front of the backend, so one hop.
+      # The production file has two (Caddy → nginx) and says 2.
+      TRUST_PROXY_HOPS: "1"
+      # No mail provider locally: the verification link is written to the
+      # backend's log (`docker compose logs backend`). It is NOT returned in the
+      # API response — NODE_ENV=production forbids that, on purpose.
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-}
     depends_on:
       mongo:
         condition: service_healthy
@@ -61,7 +73,8 @@ services:
       context: ../kehilapp-front-hardened
       dockerfile: ../kehilapp-devops/docker/frontend.Dockerfile
       args:
-        VITE_API_BASE_URL: /api
+        # Same origin: the browser calls /api/... on the proxy. See the Dockerfile.
+        VITE_REACT_APP_BASE_URL: /
     image: kehilapp-frontend:local
     restart: unless-stopped
     volumes:
@@ -73,7 +86,10 @@ services:
       context: ../kehilapp-admin-hardened
       dockerfile: ../kehilapp-devops/docker/admin.Dockerfile
       args:
-        VITE_API_BASE_URL: /api
+        # "" = same origin (the admin's own paths already start with /api);
+        # the panel is served under /admin/ by the proxy.
+        VITE_API_BASE_URL: ""
+        VITE_BASE_PATH: /admin/
     image: kehilapp-admin:local
     restart: unless-stopped
     volumes:

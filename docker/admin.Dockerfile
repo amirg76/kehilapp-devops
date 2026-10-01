@@ -10,11 +10,21 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 # ── Stage 1: build ──────────────────────────────────────────────────────────
-FROM node:20-alpine AS build
+# --platform=$BUILDPLATFORM: static output, same for every CPU — see
+# frontend.Dockerfile for why this avoids QEMU emulation on arm64 builds.
+FROM --platform=$BUILDPLATFORM node:20-alpine AS build
 WORKDIR /app
 
-ARG VITE_API_BASE_URL=/api
+# VITE_API_BASE_URL: where the API is. The admin's own request paths already
+# start with /api (src/api/kehilapp.ts), so this is the ORIGIN only — "" means
+# same origin as the page. This used to be "/api", which produced /api/api/...;
+# it only ever worked because the proxy was stripping one /api at the time.
+# VITE_BASE_PATH: where the panel is served from. The proxy mounts it under
+# /admin/, and vite.config.ts uses this for asset URLs and the router basename.
+ARG VITE_API_BASE_URL=""
+ARG VITE_BASE_PATH=/admin/
 ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
+ENV VITE_BASE_PATH=${VITE_BASE_PATH}
 
 COPY package.json package-lock.json ./
 RUN npm ci

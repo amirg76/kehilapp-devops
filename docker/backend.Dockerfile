@@ -11,7 +11,14 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 # ── Stage 1: install production dependencies ────────────────────────────────
-FROM node:20-alpine AS deps
+# --platform=$BUILDPLATFORM: this stage only runs `npm ci` on pure-JavaScript
+# dependencies (bcryptjs, not bcrypt; no sharp, no native addons — check
+# package.json before adding one), so the resulting node_modules is the same
+# for every CPU and can be produced on the builder's own architecture instead
+# of under QEMU emulation. Together with the RUN-free runtime stage below, the
+# arm64 image builds anywhere buildx can pull arm64 base layers — no emulator
+# needed. If a native dependency is ever added, drop this flag.
+FROM --platform=$BUILDPLATFORM node:20-alpine AS deps
 WORKDIR /app
 
 # Copy only the manifest first. Docker caches this layer, so `npm ci` re-runs
@@ -25,22 +32,28 @@ RUN npm ci --omit=dev && npm cache clean --force
 # ── Stage 2: final runtime image ────────────────────────────────────────────
 FROM node:20-alpine AS runtime
 
-# wget (used by the healthcheck below) ships in alpine's busybox already.
-# tini is a tiny init that reaps zombie processes and forwards signals so
-# `docker stop` shuts Node down cleanly instead of killing it after 10s.
-RUN apk add --no-cache tini
+# NO `RUN` in this stage, on purpose. Every RUN executes a binary of the
+# TARGET architecture, which on an x86 builder means QEMU emulation for the
+# arm64 image — slow, and impossible where no emulator is registered (this
+# stage used to `apk add tini` and `chown -R`, and the local arm64 build died
+# on "exec format error" at the first one, 29.9). COPY needs no execution.
+#
+# The init process (zombie reaping, clean signal forwarding on `docker stop`)
+# comes from `init: true` in both compose files — Docker's own tini — instead
+# of one installed here. wget for the healthcheck is in alpine's busybox.
 
 ENV NODE_ENV=production
 WORKDIR /app
 
+# SECURITY: never run as root. node:alpine ships a pre-made "node" user
+# (uid 1000). Everything under /app is copied already owned by it; /app itself
+# stays root-owned (WORKDIR made it), which is fine — the process only reads.
+# Running the container outside compose? Add `--init` to `docker run`: this
+# image has no init of its own.
 # Bring in the already-installed node_modules from the deps stage…
-COPY --from=deps /app/node_modules ./node_modules
-# …then the application source. .dockerignore keeps node_modules/.env/tests out.
-COPY . .
-
-# SECURITY: never run as root. node:alpine ships a pre-made "node" user (uid 1000).
-# Give it ownership of the app dir, then drop to it.
-RUN chown -R node:node /app
+COPY --chown=node:node --from=deps /app/node_modules ./node_modules
+# …then the application source. .dockerignore keeps .env/tests/docs out.
+COPY --chown=node:node . .
 USER node
 
 # Documented port. The app itself reads $PORT (defaults to 5001 in src/index.js).
@@ -52,5 +65,5 @@ EXPOSE 5001
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD wget --quiet --spider http://127.0.0.1:5001/healthz || exit 1
 
-ENTRYPOINT ["/sbin/tini", "--"]
+# No tini entrypoint: compose runs the container with `init: true`.
 CMD ["node", "src/index.js"]

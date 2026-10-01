@@ -1,35 +1,30 @@
 # 02 — Deploying a new version
 
-There are two ways: **automatic** (normal) and **manual** (when CI is down or
-you're testing).
+Two steps: **build** (GitHub Actions, on demand) and **deploy** — by hand on
+the netcup demo box, or through the `deploy (AWS showcase)` workflow on a box
+Terraform just created. Two targets, one set of images; see the README.
 
-## Automatic (recommended)
+About `deploy.yml`: its first version (31.8) tested, built and SSH-deployed on
+every push, ran once and failed on a wrong repo name. It is now only the AWS
+showcase deploy, run by hand: pick the tag, and it pulls and restarts on the
+box named in the `aws-showcase` environment secrets (listed at the top of the
+file). Building moved to `build-images.yml`.
 
-The pipeline in `.github/workflows/deploy.yml` does everything:
+## Step 1 — Build the images (GitHub Actions)
 
-| You push to… | CI does… | Lands on… |
-|--------------|----------|-----------|
-| `develop`    | test → build image `:dev` → SSH deploy | the **dev** box |
-| `main`       | test → build image `:latest` → SSH deploy | the **prod** box |
+`.github/workflows/build-images.yml` builds the backend, frontend and admin
+images from each app repo's `main` and pushes them to GHCR, tagged `latest`
+and with this repo's short commit SHA.
 
-```bash
-git checkout develop && git push     # ships to dev
-# open a PR develop → main, merge     # ships to prod
-```
+- Runs on **Actions → Build images → Run workflow** (optional extra tag), and
+  automatically when anything under `docker/` changes on `main`.
+- It does **not** run when an app repo changes. After merging app code, run it
+  by hand. Each app repo's own CI has already tested that code.
 
-Watch it in the repo's **Actions** tab. A red `test` job means nothing shipped.
-For prod you can add a required reviewer on the GitHub `prod` environment so a
-human clicks "approve" before it deploys.
+Watch it in the **Actions** tab. A red job means no image was pushed for that
+service; the others are unaffected.
 
-### One-time secrets CI needs
-Repo → Settings → Secrets and variables → Actions (per environment):
-- `SSH_HOST_DEV` / `SSH_HOST_PROD` — the box IP (`terraform output public_ip`)
-- `SSH_USER_DEV` / `SSH_USER_PROD` — `ubuntu`
-- `SSH_PRIVATE_KEY_DEV` / `SSH_PRIVATE_KEY_PROD` — the **private** key text
-- `SSH_PORT_*` — optional, defaults to 22
-- `BACKEND_REPO_TOKEN` — only if the backend repo is private
-
-## Manual deploy (on the box)
+## Step 2 — Deploy to the netcup demo box (by hand, on the box)
 
 ```bash
 ssh -i ~/.ssh/kehilapp ubuntu@<IP>
@@ -45,12 +40,34 @@ docker compose -f docker-compose.prod.yml --env-file .env up -d
 docker image prune -f                 # free disk from the old image
 ```
 
+## Step 3 — Deploy to the AWS showcase box (`deploy (AWS showcase)` workflow)
+
+Only for the demonstration run: after `terraform apply`, before `destroy`.
+
+One-time, Repo → Settings → Environments → **aws-showcase** → secrets:
+- `SSH_HOST` — the box IP (`terraform output public_ip`)
+- `SSH_USER` — `ubuntu`
+- `SSH_PRIVATE_KEY` — the **private** key text of the pair Terraform uploaded
+- `SSH_PORT` — optional, defaults to 22
+- `SSH_FINGERPRINT` — recommended: `ssh-keyscan -t ed25519 <ip>` right after
+  `apply`, then the fingerprint (`ssh-keygen -lf`). Without it the workflow
+  trusts whatever answers on that IP — and after destroy + apply the IP is new.
+
+The environment must be **created** (it does not exist yet) with a required
+reviewer, so a run waits for a click. The `tag` input is validated on the
+runner and passed to the box as a variable, never pasted into the script.
+
+Then Actions → **deploy (AWS showcase)** → Run workflow → tag (`latest` or a
+short SHA from a build-images run). It pulls, restarts, and checks `/readyz`
+from inside the docker network. The box must already have `/opt/kehilapp`
+with the compose file and a filled `.env` (runbook 01).
+
 ## Verify the deploy
 
 ```bash
 docker compose -f docker-compose.prod.yml ps
 docker compose -f docker-compose.prod.yml exec -T backend wget -qO- http://127.0.0.1:5001/readyz
-curl https://your-domain/api/healthz
+curl https://your-domain/healthz
 ```
 
 ## Deploy a specific version (pin a SHA)

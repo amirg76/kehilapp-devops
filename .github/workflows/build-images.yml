@@ -1,0 +1,116 @@
+name: Build images
+
+# Builds the three application images and pushes them to GitHub Container
+# Registry (GHCR), which is where docker-compose.prod.yml pulls from.
+#
+# WHY THIS FILE EXISTS. README.md and runbooks/02-deploy.md described a
+# `deploy.yml` that tested, built and SSH-deployed on every push. That file was
+# never written; nothing built an image, and the "pull" step in the runbooks
+# pulled from an empty registry. This is the build half. The deploy half stays
+# manual (runbooks/02-deploy.md) until there is a server to deploy to.
+#
+# The app repos are public, so checking them out needs no token. They are
+# built from their `main` — the same code their own CI already tested.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Extra image tag (e.g. a date). `latest` and the devops commit SHA are always applied."
+        required: false
+        default: ""
+  push:
+    branches: [main]
+    paths:
+      - "docker/**"
+      - ".github/workflows/build-images.yml"
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: build-images-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  OWNER: ${{ github.repository_owner }}
+
+jobs:
+  build:
+    name: "${{ matrix.image }}"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: kehilapp-backend
+            repo: amirg76/kehilapp-backend
+            dockerfile: docker/backend.Dockerfile
+            build_args: ""
+          - image: kehilapp-frontend
+            repo: amirg76/kehilapp-front
+            dockerfile: docker/frontend.Dockerfile
+            # "/" = same origin: the reverse proxy routes /api to the API, so
+            # one image serves any domain. See docker/frontend.Dockerfile.
+            build_args: |
+              VITE_REACT_APP_BASE_URL=/
+          - image: kehilapp-admin
+            repo: amirg76/kehilapp-admin
+            dockerfile: docker/admin.Dockerfile
+            build_args: |
+              VITE_API_BASE_URL=
+              VITE_BASE_PATH=/admin/
+    steps:
+      # This repo: the Dockerfiles and nginx configs.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          path: devops
+          persist-credentials: false
+
+      # The application: its own main, into a sibling folder, exactly the
+      # layout the Dockerfile comments assume (`../kehilapp-*-hardened`).
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: ${{ matrix.repo }}
+          ref: main
+          path: app
+          persist-credentials: false
+
+      # Two targets share these images (decision D-ORC-06 + ADR-1): the
+      # always-on demo on netcup (x86) and the Terraform showcase on AWS
+      # (t4g = ARM Graviton, terraform/variables.tf). QEMU lets one runner
+      # build both; a multi-arch manifest means `docker compose pull` on
+      # either box gets the right one without any change to the compose file.
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Tags: latest, this devops commit's short SHA, and the optional input.
+      # The runbooks deploy by `TAG=<sha>` to pin a build or roll back.
+      - id: meta
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ matrix.image }}
+          tags: |
+            type=raw,value=latest
+            type=sha,format=short
+            type=raw,value=${{ github.event.inputs.tag }},enable=${{ github.event.inputs.tag != '' }}
+
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: app
+          file: devops/${{ matrix.dockerfile }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: ${{ matrix.build_args }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,scope=${{ matrix.image }},mode=max
