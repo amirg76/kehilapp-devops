@@ -71,10 +71,11 @@ Locally the same routing runs behind a plain nginx proxy on
 ### A) Local (your machine) — fastest way to see it
 
 ```bash
-# from the kehilapp-devops folder, with the sibling app repos checked out next to it:
-#   ../kehilapp-backend-hardened
-#   ../kehilapp-front-hardened
-#   ../kehilapp-admin-hardened
+# from the kehilapp-devops folder, with the three app repos cloned next to it
+# under these folder names (git clone <repo> kehilapp-backend-hardened, etc.):
+#   ../kehilapp-backend-hardened   <- github.com/amirg76/kehilapp-backend
+#   ../kehilapp-front-hardened     <- github.com/amirg76/kehilapp-front
+#   ../kehilapp-admin-hardened     <- github.com/amirg76/kehilapp-admin
 cp .env.example .env          # set JWT_SECRET at least (openssl rand -hex 48)
 docker compose up --build
 
@@ -86,11 +87,10 @@ docker compose up --build
 
 ### Where this actually runs (decided 2026-09-28)
 
-Two targets, one set of images (decision `D-ORC-06` in the decisions
-registry, and ADR-1 in the orchestrator's build log):
+Two targets, one set of images:
 
 1. **The always-on demo** — the link in a CV — runs on **one shared VPS
-   (netcup, 16 GB) together with the owner's other projects**. Deployed by
+   (netcup, 16 GB) shared with other small projects**. Deployed by
    hand: `docker compose pull` + `up -d` (runbook 02).
 2. **The AWS showcase** — `terraform apply` creates a box, the manual
    `deploy (AWS showcase)` workflow puts the app on it, you verify and record,
@@ -104,16 +104,14 @@ What that means for this repo:
   box pulls the right one with the same compose file.
 - `docker-compose.prod.yml` is what runs on both. Its Caddy binds ports
   80/443; on the SHARED netcup box that is a decision to make first (one
-  shared entry point, or a Cloudflare Tunnel with no open ports — the sibling
-  `career-flow-ai/infra` already uses the tunnel). On the AWS box it is fine
-  as is.
+  shared entry point, or a Cloudflare Tunnel with no open ports). On the AWS
+  box it is fine as is.
 - The database is **MongoDB Atlas**, database `kehilapp_demo`: put the SRV
   string in the server `.env` as `MONGO_URI`, and allow the server's address in
   Atlas → Network Access. The self-hosted `mongo` service is a fallback only;
   note `scripts/seedDemo.js` refuses to seed a database not named `*_demo`.
 
-**Server `.env` — the full list the backend reads today** (`.env.example` in
-this repo predates several of these):
+**Server `.env` — the full list the backend reads today:**
 
 | Variable | Required | What it is |
 |---|---|---|
@@ -189,7 +187,7 @@ kehilapp-devops/
 │   ├── backend.Dockerfile        Node 20 backend image (multi-stage)
 │   ├── frontend.Dockerfile       Vite public site → static nginx
 │   ├── admin.Dockerfile          Vite admin panel → static nginx
-│   ├── .dockerignore.example
+│   ├── .dockerignore.example      copy into each app repo as .dockerignore
 │   ├── nginx/
 │   │   ├── reverse-proxy.conf     path routing (/,/admin,/api)
 │   │   └── spa.nginx.conf         SPA fallback for the static sites
@@ -207,7 +205,8 @@ kehilapp-devops/
 │   ├── README.md                 terraform-specific guide
 │   └── .gitignore                keeps *.tfvars / state out of git
 ├── .github/workflows/
-│   └── deploy.yml                test → build image → SSH deploy (dev/prod)
+│   ├── build-images.yml          build all 3 images (amd64+arm64) → GHCR, on demand
+│   └── deploy.yml                manual: SSH-deploy a tag to the AWS showcase box
 └── runbooks/
     ├── 01-initial-server-setup.md
     ├── 02-deploy.md
