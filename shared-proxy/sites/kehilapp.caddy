@@ -1,0 +1,13 @@
+# kehilapp — resident app at /, admin panel at /admin/, API at /api/.
+# All three are routed inside the project's own nginx edge (kehilapp-proxy),
+# which docker-compose.netcup.yml puts on the `edge` network under that name.
+# Hostname: the A record for it is created at the DNS host (Hostinger) and must
+# resolve to this box before Caddy can obtain the certificate.
+
+kehilapp.letstalkanddesign.com {
+	encode zstd gzip
+	# HSTS lives on the TLS terminator. CSP, X-Frame-Options and the rest are
+	# set by the project's nginx where the HTML is served.
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	reverse_proxy kehilapp-proxy:80
+}

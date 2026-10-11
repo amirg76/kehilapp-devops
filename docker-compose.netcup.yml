@@ -1,0 +1,40 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# netcup OVERRIDE — layer this on top of docker-compose.prod.yml on the SHARED
+# demo box. Decided 2026-10-11: the box has ONE public entry point for every
+# project (shared-proxy/), so this project's own Caddy must not bind 80/443.
+#
+#     docker compose -f docker-compose.prod.yml -f docker-compose.netcup.yml \
+#                    --env-file .env up -d
+#
+# What it changes, and nothing else:
+#   1. `caddy` moves behind a profile, so a plain `up -d` does not start it.
+#      (Compose cannot delete a service from an override; a profile is the
+#      documented way to leave one out.) The AWS showcase box, which is NOT
+#      shared, keeps using prod.yml alone and gets its own Caddy as before.
+#   2. `proxy` (the internal nginx edge) joins the box-wide `edge` network under
+#      a fixed container name, so the shared Caddy can reach it as
+#      kehilapp-proxy:80. It still publishes no host port.
+#
+# The request chain is unchanged — client → Caddy → nginx → backend — so
+# TRUST_PROXY_HOPS stays "2" (set in prod.yml).
+#
+# NOT YET RUN ON A REAL BOX (written before the server was bought). Verified
+# locally only with `docker compose ... config` — see runbooks/00.
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  caddy:
+    profiles: ["standalone"]
+
+  proxy:
+    container_name: kehilapp-proxy
+    networks:
+      - kehilnet
+      - edge
+
+networks:
+  # Created once per box by runbooks/00: `docker network create edge`.
+  # External so that `compose down` of this project never removes it from
+  # under the other projects.
+  edge:
+    external: true

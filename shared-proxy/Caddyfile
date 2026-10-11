@@ -1,0 +1,26 @@
+# Box-level Caddyfile: one entry point for every project on the shared demo box.
+# Project site blocks live in sites/*.caddy (one file per project) and are
+# pulled in by the import below. Do not put a project here.
+
+{
+	email {$ACME_EMAIL}
+}
+
+# Each file in sites/ is a complete site block:
+#
+#   demo.example.com {
+#       encode zstd gzip
+#       header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+#       reverse_proxy <that-project's-container>:80
+#   }
+#
+# The upstream is reachable because the project's container joined the
+# `edge` network (see kehilapp's docker-compose.netcup.yml for the pattern).
+import sites/*.caddy
+
+# Anything that arrives by bare IP or an unknown hostname over plain HTTP gets a
+# one-line answer instead of a project's page. Known hostnames never land here:
+# Caddy matches their site blocks first and redirects :80 → :443 for them.
+:80 {
+	respond "shared demo box — nothing at this hostname" 404
+}

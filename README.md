@@ -102,10 +102,13 @@ What that means for this repo:
 - `build-images.yml` builds every image for **both** x86 (netcup) and arm64
   (the AWS box is `t4g`, ARM Graviton — `terraform/variables.tf`), so either
   box pulls the right one with the same compose file.
-- `docker-compose.prod.yml` is what runs on both. Its Caddy binds ports
-  80/443; on the SHARED netcup box that is a decision to make first (one
-  shared entry point, or a Cloudflare Tunnel with no open ports). On the AWS
-  box it is fine as is.
+- `docker-compose.prod.yml` is what runs on both. On the AWS box it runs as
+  is, with its own Caddy on 80/443. On the SHARED netcup box (decided
+  2026-10-11) no project binds a port: `shared-proxy/` is the box's single
+  Caddy, routing by hostname to each project over a box-wide `edge` network,
+  and `docker-compose.netcup.yml` layers on top of prod.yml to leave this
+  project's Caddy out and put its nginx edge on that network. Runbook 00 is
+  the zero-to-running guide for that box.
 - The database is **MongoDB Atlas**, database `kehilapp_demo`: put the SRV
   string in the server `.env` as `MONGO_URI`, and allow the server's address in
   Atlas → Network Access. The self-hosted `mongo` service is a fallback only;
