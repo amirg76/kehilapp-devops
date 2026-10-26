@@ -28,6 +28,9 @@
 	# after the first deploy.
 	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
 	# Hand everything to the internal nginx edge, which routes /, /admin, /api.
+	# A client-sent X-Forwarded-For is discarded: Caddy's reverse_proxy docs —
+	# "by default, the proxy will ignore their values from incoming requests, to
+	# prevent spoofing". trusted_proxies stays unset: nothing is in front of Caddy.
 	reverse_proxy proxy:80
 }
 

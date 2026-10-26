@@ -1,0 +1,49 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# The ONE public entry point of the shared demo box (netcup). Decided 2026-10-11.
+#
+# Every project on the box runs its own compose stack with NO published ports;
+# each one joins the box-wide `edge` network and gets a site block under
+# sites/<project>.caddy. This Caddy owns 80/443 for the whole machine, fetches
+# and renews the Let's Encrypt certificate for every hostname, and forwards by
+# hostname. Adding a project = one file in sites/ + `docker compose restart`.
+#
+# This folder lives in kehilapp-devops because kehilapp is the first tenant;
+# it serves the whole box, not only kehilapp. Run it from /opt/shared-proxy
+# (runbooks/00) so a `git pull` in a project folder never touches it.
+#
+#     docker network create edge          # once per box
+#     cd /opt/shared-proxy
+#     docker compose up -d
+#     docker compose exec caddy caddy validate --config /etc/caddy/Caddyfile
+#
+# NOT YET RUN ON A REAL BOX (written before the server was bought).
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: shared-proxy
+
+services:
+  caddy:
+    # Pinned minor: X-Forwarded-For from an untrusted client is dropped since
+    # Caddy 2.5; a floating "2" tag could also jump a major one day. Bump on purpose.
+    image: caddy:2.10-alpine
+    restart: always
+    environment:
+      # Let's Encrypt expiry notices go here. Set in /opt/shared-proxy/.env.
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in /opt/shared-proxy/.env}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./sites:/etc/caddy/sites:ro
+      - caddy_data:/data        # issued certificates — never delete, or every site re-issues
+      - caddy_config:/config
+    networks: [edge]
+
+volumes:
+  caddy_data:
+  caddy_config:
+
+networks:
+  edge:
+    external: true

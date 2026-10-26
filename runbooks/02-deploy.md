@@ -35,8 +35,11 @@ git pull --ff-only                    # refresh compose/nginx/caddy configs
 export REGISTRY=ghcr.io/<owner-lowercase>
 export TAG=latest                     # or dev, or a specific 7-char git sha
 
-docker compose -f docker-compose.prod.yml --env-file .env pull
-docker compose -f docker-compose.prod.yml --env-file .env up -d
+# Both -f files, always: the second one keeps this project's Caddy off and
+# puts the nginx edge on the shared `edge` network (runbook 00). Without it,
+# compose would try to bind 80/443 and collide with the box's shared proxy.
+docker compose -f docker-compose.prod.yml -f docker-compose.netcup.yml --env-file .env pull
+docker compose -f docker-compose.prod.yml -f docker-compose.netcup.yml --env-file .env up -d
 docker image prune -f                 # free disk from the old image
 ```
 

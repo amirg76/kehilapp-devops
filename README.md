@@ -102,10 +102,13 @@ What that means for this repo:
 - `build-images.yml` builds every image for **both** x86 (netcup) and arm64
   (the AWS box is `t4g`, ARM Graviton — `terraform/variables.tf`), so either
   box pulls the right one with the same compose file.
-- `docker-compose.prod.yml` is what runs on both. Its Caddy binds ports
-  80/443; on the SHARED netcup box that is a decision to make first (one
-  shared entry point, or a Cloudflare Tunnel with no open ports). On the AWS
-  box it is fine as is.
+- `docker-compose.prod.yml` is what runs on both. On the AWS box it runs as
+  is, with its own Caddy on 80/443. On the SHARED netcup box (decided
+  2026-10-11) no project binds a port: `shared-proxy/` is the box's single
+  Caddy, routing by hostname to each project over a box-wide `edge` network,
+  and `docker-compose.netcup.yml` layers on top of prod.yml to leave this
+  project's Caddy out and put its nginx edge on that network. Runbook 00 is
+  the zero-to-running guide for that box.
 - The database is **MongoDB Atlas**, database `kehilapp_demo`: put the SRV
   string in the server `.env` as `MONGO_URI`, and allow the server's address in
   Atlas → Network Access. The self-hosted `mongo` service is a fallback only;
@@ -169,7 +172,8 @@ terraform apply -var-file="prod.tfvars"
 # (the "prod" workspace is part of the worked example; the real always-on demo is on netcup)
 ```
 
-**Order of the runbooks:** `01` setup → `02` deploy → `03` rollback (if needed)
+**Order of the runbooks:** `00` the shared netcup box (always-on demo) **or**
+`01` the AWS showcase box → `02` deploy → `03` rollback (if needed)
 → `04` logs/monitoring → `05` SSL → `06` SSH.
 
 ---
@@ -183,6 +187,11 @@ kehilapp-devops/
 ├── .env.example                  the one secrets file (copy to .env)
 ├── docker-compose.yml            LOCAL: build + run everything
 ├── docker-compose.prod.yml       SERVER: pull images + Caddy HTTPS
+├── docker-compose.netcup.yml     SHARED BOX overlay: no own Caddy, nginx edge on the `edge` network
+├── shared-proxy/                 the shared box's ONE Caddy (80/443), one sites/*.caddy per project
+│   ├── docker-compose.yml
+│   ├── Caddyfile                 imports sites/*.caddy
+│   └── sites/kehilapp.caddy      first tenant
 ├── docker/
 │   ├── backend.Dockerfile        Node 20 backend image (multi-stage)
 │   ├── frontend.Dockerfile       Vite public site → static nginx
@@ -208,7 +217,8 @@ kehilapp-devops/
 │   ├── build-images.yml          build all 3 images (amd64+arm64) → GHCR, on demand
 │   └── deploy.yml                manual: SSH-deploy a tag to the AWS showcase box
 └── runbooks/
-    ├── 01-initial-server-setup.md
+    ├── 00-netcup-shared-box.md   bare Ubuntu → running demo on the shared box
+    ├── 01-initial-server-setup.md   the AWS showcase box (after terraform apply)
     ├── 02-deploy.md
     ├── 03-rollback.md
     ├── 04-logs-and-monitoring.md
