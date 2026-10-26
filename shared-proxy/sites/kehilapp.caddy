@@ -9,5 +9,10 @@ kehilapp.letstalkanddesign.com {
 	# HSTS lives on the TLS terminator. CSP, X-Frame-Options and the rest are
 	# set by the project's nginx where the HTML is served.
 	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	# Client address: Caddy sets X-Forwarded-For to the real remote address and,
+	# per its docs, "by default, the proxy will ignore their values from incoming
+	# requests, to prevent spoofing" (reverse_proxy → Defaults; trusted_proxies
+	# is unset here on purpose — nothing sits in front of this Caddy). nginx then
+	# appends its own hop and the backend skips TRUST_PROXY_HOPS=2.
 	reverse_proxy kehilapp-proxy:80
 }

@@ -27,6 +27,8 @@ services:
     profiles: ["standalone"]
 
   proxy:
+    # A fixed name is the address the shared Caddy proxies to. It also means
+    # `up --scale proxy=N` cannot run — intended: there is one nginx edge.
     container_name: kehilapp-proxy
     networks:
       - kehilnet

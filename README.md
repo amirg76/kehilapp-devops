@@ -172,7 +172,8 @@ terraform apply -var-file="prod.tfvars"
 # (the "prod" workspace is part of the worked example; the real always-on demo is on netcup)
 ```
 
-**Order of the runbooks:** `01` setup → `02` deploy → `03` rollback (if needed)
+**Order of the runbooks:** `00` the shared netcup box (always-on demo) **or**
+`01` the AWS showcase box → `02` deploy → `03` rollback (if needed)
 → `04` logs/monitoring → `05` SSL → `06` SSH.
 
 ---
@@ -186,6 +187,11 @@ kehilapp-devops/
 ├── .env.example                  the one secrets file (copy to .env)
 ├── docker-compose.yml            LOCAL: build + run everything
 ├── docker-compose.prod.yml       SERVER: pull images + Caddy HTTPS
+├── docker-compose.netcup.yml     SHARED BOX overlay: no own Caddy, nginx edge on the `edge` network
+├── shared-proxy/                 the shared box's ONE Caddy (80/443), one sites/*.caddy per project
+│   ├── docker-compose.yml
+│   ├── Caddyfile                 imports sites/*.caddy
+│   └── sites/kehilapp.caddy      first tenant
 ├── docker/
 │   ├── backend.Dockerfile        Node 20 backend image (multi-stage)
 │   ├── frontend.Dockerfile       Vite public site → static nginx
@@ -211,7 +217,8 @@ kehilapp-devops/
 │   ├── build-images.yml          build all 3 images (amd64+arm64) → GHCR, on demand
 │   └── deploy.yml                manual: SSH-deploy a tag to the AWS showcase box
 └── runbooks/
-    ├── 01-initial-server-setup.md
+    ├── 00-netcup-shared-box.md   bare Ubuntu → running demo on the shared box
+    ├── 01-initial-server-setup.md   the AWS showcase box (after terraform apply)
     ├── 02-deploy.md
     ├── 03-rollback.md
     ├── 04-logs-and-monitoring.md

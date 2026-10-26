@@ -37,13 +37,29 @@ From a **second** terminal, before closing the root one:
 ```bash
 ssh deploy@<IP>                    # must log in with the key, no password prompt
 ```
-Only once that works, disable password logins:
+Only once that works, disable password and root logins. **Not** by editing
+`/etc/ssh/sshd_config`: on Ubuntu 22.04/24.04 that file starts with
+`Include /etc/ssh/sshd_config.d/*.conf`, sshd keeps the **first** value it
+meets, and cloud images ship a drop-in there (often `50-cloud-init.conf` with
+`PasswordAuthentication yes`) that silently wins over anything below. A drop-in
+that sorts first is the only edit that sticks:
 ```bash
-sudo sed -i 's/^#\?PasswordAuthentication .*/PasswordAuthentication no/' /etc/ssh/sshd_config
-sudo sed -i 's/^#\?PermitRootLogin .*/PermitRootLogin no/' /etc/ssh/sshd_config
+printf 'PasswordAuthentication no\nPermitRootLogin no\nKbdInteractiveAuthentication no\n' \
+  | sudo tee /etc/ssh/sshd_config.d/00-hardening.conf
+grep -rn -iE "PasswordAuthentication|PermitRootLogin" /etc/ssh/sshd_config.d/   # see what else is there
+sudo sshd -t                                   # syntax check BEFORE restarting
+sudo sshd -T | grep -iE "^(passwordauthentication|permitrootlogin|kbdinteractiveauthentication)"
 sudo systemctl restart ssh
 ```
-**Done =** `ssh root@<IP>` is refused, `ssh deploy@<IP>` works.
+`sshd -T` prints the configuration **as sshd resolves it**, not what one file
+says. All three lines must read `no`. Then prove it from your laptop, with the
+key switched off so only a password could get you in:
+```bash
+ssh -o PubkeyAuthentication=no -o PreferredAuthentications=password deploy@<IP>
+```
+**Done =** that command is refused (`Permission denied (publickey)`),
+`ssh root@<IP>` is refused, and `ssh deploy@<IP>` with the key still works.
+Keep the root terminal open until all three hold.
 
 ## 2. Updates and firewall
 
@@ -77,6 +93,19 @@ docker --version && docker compose version
 **Done =** both print a version as `deploy`, without `sudo`.
 
 ## 4. The box-wide network and the shared entry point
+
+> `git clone` fetches `main`. The files used below exist on `main` only once
+> the pull request that added them (`shared-proxy/`, `docker-compose.netcup.yml`,
+> this runbook) has been merged. Check on GitHub first.
+
+**What `edge` means:** every container on it can reach every other one on it
+directly, by name, bypassing the shared Caddy (no TLS, no hostname check). It
+is a **full-trust network between the tenants of this box** — all of them are
+this owner's own projects. Databases and application containers stay on their
+project's private network (kehilapp: `kehilnet`); only the edge/nginx container
+of each project joins `edge`. If a tenant you do not fully trust ever lands
+here, that assumption is gone and the admin paths need their own authentication
+at nginx.
 
 ```bash
 docker network create edge
@@ -132,6 +161,17 @@ line (it sits behind the `standalone` profile); `docker ps` shows no project
 port on the host, only shared-proxy's 80/443.
 
 ## 7. Verify from the outside
+
+First the certificate. Caddy answers plain HTTP on `:80` with a 404 for
+unknown hosts (shared-proxy/Caddyfile); Let's Encrypt's HTTP-01 challenge for
+a **known** host is handled by Caddy before any site block, and TLS-ALPN-01 on
+443 is the fallback. Neither was exercised before the first real box, so look:
+```bash
+docker compose -f /opt/shared-proxy/docker-compose.yml logs caddy | grep -iE "certificate obtained|obtaining|error"
+```
+**Done =** a `certificate obtained successfully` line for the hostname, no
+`error` lines after it. If the challenge fails, the usual causes are the A
+record not resolving to this box yet, or port 80 closed.
 
 ```bash
 curl -sI https://kehilapp.letstalkanddesign.com/ | grep -iE "^HTTP|strict-transport"
