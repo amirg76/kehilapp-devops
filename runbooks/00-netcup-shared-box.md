@@ -55,7 +55,7 @@ sudo systemctl restart ssh
 says. All three lines must read `no`. Then prove it from your laptop, with the
 key switched off so only a password could get you in:
 ```bash
-ssh -o PubkeyAuthentication=no -o PreferredAuthentications=password deploy@<IP>
+ssh -o PubkeyAuthentication=no -o PreferredAuthentications=password,keyboard-interactive deploy@<IP>
 ```
 **Done =** that command is refused (`Permission denied (publickey)`),
 `ssh root@<IP>` is refused, and `ssh deploy@<IP>` with the key still works.
@@ -109,7 +109,9 @@ at nginx.
 
 ```bash
 docker network create edge
-sudo mkdir -p /opt/shared-proxy && sudo chown deploy:deploy /opt/shared-proxy
+# /opt belongs to root; create both folders as root and hand them to deploy,
+# or the clone below fails with "Permission denied" (gate, 26.10).
+sudo mkdir -p /opt/shared-proxy /opt/kehilapp && sudo chown deploy:deploy /opt/shared-proxy /opt/kehilapp
 git clone https://github.com/amirg76/kehilapp-devops.git /opt/kehilapp
 cp -r /opt/kehilapp/shared-proxy/. /opt/shared-proxy/
 cd /opt/shared-proxy

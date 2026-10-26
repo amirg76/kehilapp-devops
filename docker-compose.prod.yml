@@ -110,7 +110,7 @@ services:
 
   # Public TLS terminator. Reads Caddyfile → gets/renews certs automatically.
   caddy:
-    image: caddy:2-alpine
+    image: caddy:2.10-alpine   # pinned minor, see shared-proxy/docker-compose.yml
     restart: always
     environment:
       # Injected into the container so the Caddyfile's {$DOMAIN}/{$ACME_EMAIL}

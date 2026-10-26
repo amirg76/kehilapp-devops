@@ -23,7 +23,9 @@ name: shared-proxy
 
 services:
   caddy:
-    image: caddy:2-alpine
+    # Pinned minor: X-Forwarded-For from an untrusted client is dropped since
+    # Caddy 2.5; a floating "2" tag could also jump a major one day. Bump on purpose.
+    image: caddy:2.10-alpine
     restart: always
     environment:
       # Let's Encrypt expiry notices go here. Set in /opt/shared-proxy/.env.
