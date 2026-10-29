@@ -1,23 +1,37 @@
-# 00 — The shared netcup box, from bare Ubuntu to a running demo
+# 00 — The shared box, from bare Ubuntu to a running demo
 
 This is the guide for the **always-on demo** (runbook 01 is for the AWS showcase
-box, where Terraform has already done steps 2–4 for you). A netcup server
-arrives empty: Ubuntu, a root password in an email, no Docker, no firewall.
+box, where Terraform has already done steps 2–4 for you). A fresh VPS arrives
+empty: Ubuntu, a root password, no Docker, no firewall.
 
 Decided 2026-09-28 (one shared box for every small project) and 2026-10-11
 (one shared public entry point, `shared-proxy/`, instead of a Caddy per project).
 
-> **Status: written before the server was bought, never run end-to-end.**
-> Each step says what "done" looks like so you can tell where it stopped.
-> Cross off the line above after the first successful run and note the date.
+> **Status: ran end-to-end on 2026-10-29** on a Hostinger KVM 4 (not netcup —
+> netcup replaced its G12 line and raised prices in 9/2026; the steps are
+> provider-independent). `https://kehilapp.letstalkanddesign.com` answered
+> 200 with HSTS, `/readyz` reported `db: up`, the demo seed ran. See
+> "First-run notes" at the end for what differed from the dry text.
+> Adding another project: `shared-proxy/ADDING-A-TENANT.md`.
+
+**Hostinger-specific, before step 1:** in the panel's setup wizard choose the
+location (Frankfurt was closest), **Ubuntu 24.04 LTS** (the wizard defaults to
+the newest release; stay on the version these steps were verified on), set a
+root password you will never use, and paste your **public** key under
+"Add SSH key" — it lands in root's `authorized_keys`, so step 1 copies it
+rather than pasting it. Leave "Docker manager" and the malware scanner off:
+Docker is installed below from Docker's own repository and managed in code;
+two managers of one Docker collide.
 
 ## 0. What you need in hand
 
-- The netcup order confirmation: IP address, root password (you'll change it),
-  and which line you bought — the README's cost note says *verify RS vs VPS at
-  purchase*; write the answer here: `__________`.
-- An SSH key on your laptop: `ls ~/.ssh/id_ed25519.pub` (make one with
-  `ssh-keygen -t ed25519` if missing).
+- The provider's confirmation: IP address and root password (you'll stop using
+  it in step 1). First run: Hostinger KVM 4, 4 vCPU / 16 GB / 200 GB NVMe.
+- An SSH key on your laptop, **with a passphrase**, loaded in an agent:
+  `ssh-keygen -t ed25519 -f ~/.ssh/hostinger-shared -C <label>`, then
+  `ssh-add ~/.ssh/hostinger-shared`. Prove the file is locked:
+  `ssh-keygen -y -f ~/.ssh/hostinger-shared` must *ask* for the passphrase.
+  (`ssh-keygen -p` without `-f` defaults to a *different* key — always `-f`.)
 - Hostinger DNS access for `letstalkanddesign.com`.
 - The values for the kehilapp `.env` (README table "Server .env"): Atlas SRV
   string, Resend key, JWT secret, S3 bucket, Anthropic key (optional).
@@ -25,13 +39,18 @@ Decided 2026-09-28 (one shared box for every small project) and 2026-10-11
 ## 1. First login and a non-root user
 
 ```bash
-ssh root@<IP>                      # password from the netcup email
-adduser deploy                     # choose a password; it is only for sudo
+ssh root@<IP>                      # with the key the panel installed for root
+adduser --disabled-password --gecos "" deploy      # no password at all: the key is the credential
 usermod -aG sudo deploy
-mkdir -p /home/deploy/.ssh && chmod 700 /home/deploy/.ssh
-nano /home/deploy/.ssh/authorized_keys     # paste your id_ed25519.pub, one line
-chmod 600 /home/deploy/.ssh/authorized_keys && chown -R deploy:deploy /home/deploy/.ssh
+install -d -m 700 -o deploy -g deploy /home/deploy/.ssh
+install -m 600 -o deploy -g deploy /root/.ssh/authorized_keys /home/deploy/.ssh/authorized_keys
+printf 'deploy ALL=(ALL) NOPASSWD:ALL\n' > /etc/sudoers.d/90-deploy
+chmod 440 /etc/sudoers.d/90-deploy && visudo -cf /etc/sudoers.d/90-deploy   # "parsed OK" or sudo is broken
+ssh-keygen -lf /home/deploy/.ssh/authorized_keys   # fingerprint must equal `ssh-add -l` on your laptop
 ```
+`deploy` has no password and sudo asks for none — the same shape as the
+`ubuntu` user on an AWS image; the locked key on your laptop is the credential.
+(It is also what lets an automation run these steps: nothing to type.)
 
 From a **second** terminal, before closing the root one:
 ```bash
@@ -190,9 +209,17 @@ verify, log in. If the verification link points at the wrong host,
 ## 8. Seed demo data (once)
 
 ```bash
-docker compose -f docker-compose.prod.yml -f docker-compose.netcup.yml exec backend node scripts/seedDemo.js
+docker compose -f docker-compose.prod.yml -f docker-compose.netcup.yml --env-file .env \
+  exec -T -e NODE_ENV=development backend node scripts/seedDemo.js
 ```
-It refuses any database whose name is not `*_demo` — that is the guard, not a bug.
+Two guards, both on purpose: it refuses `NODE_ENV=production` (compose sets
+that for the backend, hence the one-off `-e NODE_ENV=development` on the
+`exec` only — the running container is untouched), and it refuses any
+database whose name does not end in `_demo`. The second one is also your
+proof that `MONGO_URI` names the right database: on the first run (29.10) the
+pasted Atlas string ended in `/` with no database name, Mongo silently used
+`test`, `/api/messages` answered 500, and this script would have refused.
+Check before seeding: `grep -c 'mongodb.net/kehilapp_demo?' .env` must be 1.
 
 ## When something is wrong
 
@@ -211,3 +238,58 @@ It refuses any database whose name is not `*_demo` — that is the guard, not a 
 2. One file `/opt/shared-proxy/sites/<project>.caddy` with its hostname and
    `reverse_proxy <container_name>:<port>`.
 3. A record at Hostinger → `docker compose restart caddy` in `/opt/shared-proxy`.
+
+Full checklist for a new tenant: `shared-proxy/ADDING-A-TENANT.md`.
+
+## First-run notes (2026-10-29, Hostinger KVM 4, Ubuntu 24.04.5)
+
+What the dry text above did not know, recorded from the real outputs:
+
+- **The sshd trap was real.** The image shipped *two* drop-ins:
+  `50-cloud-init.conf: PasswordAuthentication yes` and
+  `60-cloudimg-settings.conf: PasswordAuthentication no`. First value wins, so
+  password login was **on** until `00-hardening.conf` existed. `sshd -T`
+  before the restart showed all three `no`; after the restart the negative
+  test printed `Permission denied (publickey)` for both the password-only and
+  the root attempts, and the key login still worked.
+- **How the steps were run:** each step as a script file on the laptop,
+  streamed with `ssh -o BatchMode=yes deploy@<IP> bash -s < step.sh`. On
+  Windows use `C:\Windows\System32\OpenSSH\ssh.exe` (the only client that
+  talks to the Windows ssh-agent holding the passphrase-locked key), and strip
+  the BOM and CRLF first (`tr -d '\r'`, drop a leading `EF BB BF`) — bash
+  chokes on both. Piping from PowerShell adds them back; pipe from Git Bash.
+- **Firewall:** `ufw --force enable` (non-interactive); the SSH session
+  survived; from outside 22 answered, 80 and 8080 did not (nothing listened
+  yet). `apt upgrade` needed no reboot.
+- **Docker:** 29.9.2 + Compose v5.6.1 from Docker's apt repo (`noble`);
+  `docker ps` as `deploy` without sudo on the next login.
+- **Shared proxy:** up first try; `caddy validate` → `Valid configuration`;
+  bare-IP HTTP from outside → `404 shared demo box — nothing at this hostname`.
+- **DNS:** the A record form in Hostinger's panel was filled by the automation
+  but the *Add Record* click was refused by its permission classifier (account
+  change) — the owner clicked. Resolved within a minute at Hostinger's
+  nameserver and at 8.8.8.8. A `docker compose restart caddy` triggered
+  issuance immediately instead of waiting out the backoff:
+  `certificate obtained successfully … issuer acme-v02.api.letsencrypt.org`.
+  Before kehilapp was up, https answered **502** (Caddy could not resolve
+  `kehilapp-proxy` yet) — expected.
+- **Scanners arrive in minutes.** Five minutes after the DNS record, the Caddy
+  log already showed requests from unrelated IPs. Rule 1 of ADDING-A-TENANT.md
+  (no published ports) is not theoretical.
+- **`.env` was written with `umask 077`** and a `JWT_SECRET` generated on the
+  box (`openssl rand -hex 48`), never displayed. `MONGO_URI` and
+  `RESEND_API_KEY` were left as `__FILL__` for the owner. Images were pulled
+  before the secrets existed (pull needs only `REGISTRY`/`TAG`).
+- **Gap found:** `.env.example` lacks `APP_BASE_URL`, `EMAIL_PROVIDER`,
+  `RESEND_API_KEY`, `MAIL_FROM` although the README table and the backend
+  require them. Fix the template when next touching it.
+- **Step 6/7, the database-name trap:** Atlas's "Connect → Drivers" string
+  ends in `/` with no database. Pasted as-is, Mongo connects fine and uses
+  `test`; the backend logged `DB connected`, `/readyz` said `db: up`, and the
+  only symptom was `/api/messages` → 500. Caught with count-only greps
+  (`grep -c 'mongodb.net/ ' .env` = 1), fixed with an in-place `sed -i` (a
+  `.env.bak-<date>` copy first), backend recreated, API → 200. Always end the
+  string with `/kehilapp_demo?retryWrites=true&w=majority`.
+- **Step 7 timing:** `up -d` to all five services healthy: 36 s. Step 8 as
+  rewritten above (NODE_ENV override on the exec). Demo logins printed by the
+  seed were saved to `/opt/kehilapp/.demo-logins` (mode 600).
