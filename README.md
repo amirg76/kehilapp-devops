@@ -127,7 +127,8 @@ What that means for this repo:
 | `RESEND_API_KEY`, `MAIL_FROM` | yes | Resend key; sender on a domain verified in Resend |
 | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | optional | AI category suggestion in the admin panel; set a spend cap at Anthropic |
 | `TRUST_PROXY_HOPS` | set by compose | `2` for Caddy → nginx → backend |
-| `BUCKET_*` (4) | yes | S3 for attachments; placeholders keep everything else working |
+| `BUCKET_*` (4) | yes | S3-compatible storage for attachments. Placeholders keep everything **except attachments** working: posting a message *with* a file then fails with 500 (seen 29.10 on the demo box) |
+| `BUCKET_ENDPOINT` | for R2 | optional; set to `https://<account-id>.r2.cloudflarestorage.com` with `BUCKET_REGION=auto` for Cloudflare R2 (free: 10 GB, no egress fees); leave unset for AWS S3 (backend PR `r2-storage`) |
 | `DOMAIN`, `ACME_EMAIL` | yes | for Caddy's certificate |
 | `REGISTRY`, `TAG` | yes | `ghcr.io/amirg76`, `latest` or a short SHA |
 
