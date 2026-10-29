@@ -7,11 +7,11 @@ empty: Ubuntu, a root password, no Docker, no firewall.
 Decided 2026-09-28 (one shared box for every small project) and 2026-10-11
 (one shared public entry point, `shared-proxy/`, instead of a Caddy per project).
 
-> **Status: steps 1–6 ran for real on 2026-10-29** on a Hostinger KVM 4
-> (not netcup — netcup replaced its G12 line and raised prices in 9/2026; the
-> steps are provider-independent). Each step says what "done" looks like.
-> Steps 7–8 (kehilapp up, verify, seed) were pending the owner's secrets at
-> the time of writing; see "First-run notes" at the end for what differed.
+> **Status: ran end-to-end on 2026-10-29** on a Hostinger KVM 4 (not netcup —
+> netcup replaced its G12 line and raised prices in 9/2026; the steps are
+> provider-independent). `https://kehilapp.letstalkanddesign.com` answered
+> 200 with HSTS, `/readyz` reported `db: up`, the demo seed ran. See
+> "First-run notes" at the end for what differed from the dry text.
 > Adding another project: `shared-proxy/ADDING-A-TENANT.md`.
 
 **Hostinger-specific, before step 1:** in the panel's setup wizard choose the
@@ -209,9 +209,17 @@ verify, log in. If the verification link points at the wrong host,
 ## 8. Seed demo data (once)
 
 ```bash
-docker compose -f docker-compose.prod.yml -f docker-compose.netcup.yml exec backend node scripts/seedDemo.js
+docker compose -f docker-compose.prod.yml -f docker-compose.netcup.yml --env-file .env \
+  exec -T -e NODE_ENV=development backend node scripts/seedDemo.js
 ```
-It refuses any database whose name is not `*_demo` — that is the guard, not a bug.
+Two guards, both on purpose: it refuses `NODE_ENV=production` (compose sets
+that for the backend, hence the one-off `-e NODE_ENV=development` on the
+`exec` only — the running container is untouched), and it refuses any
+database whose name does not end in `_demo`. The second one is also your
+proof that `MONGO_URI` names the right database: on the first run (29.10) the
+pasted Atlas string ended in `/` with no database name, Mongo silently used
+`test`, `/api/messages` answered 500, and this script would have refused.
+Check before seeding: `grep -c 'mongodb.net/kehilapp_demo?' .env` must be 1.
 
 ## When something is wrong
 
@@ -275,3 +283,13 @@ What the dry text above did not know, recorded from the real outputs:
 - **Gap found:** `.env.example` lacks `APP_BASE_URL`, `EMAIL_PROVIDER`,
   `RESEND_API_KEY`, `MAIL_FROM` although the README table and the backend
   require them. Fix the template when next touching it.
+- **Step 6/7, the database-name trap:** Atlas's "Connect → Drivers" string
+  ends in `/` with no database. Pasted as-is, Mongo connects fine and uses
+  `test`; the backend logged `DB connected`, `/readyz` said `db: up`, and the
+  only symptom was `/api/messages` → 500. Caught with count-only greps
+  (`grep -c 'mongodb.net/ ' .env` = 1), fixed with an in-place `sed -i` (a
+  `.env.bak-<date>` copy first), backend recreated, API → 200. Always end the
+  string with `/kehilapp_demo?retryWrites=true&w=majority`.
+- **Step 7 timing:** `up -d` to all five services healthy: 36 s. Step 8 as
+  rewritten above (NODE_ENV override on the exec). Demo logins printed by the
+  seed were saved to `/opt/kehilapp/.demo-logins` (mode 600).
