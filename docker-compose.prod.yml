@@ -51,6 +51,12 @@ services:
       BUCKET_REGION: ${BUCKET_REGION}
       BUCKET_ACCESS_KEY: ${BUCKET_ACCESS_KEY}
       BUCKET_SECRET_ACCESS_KEY: ${BUCKET_SECRET_ACCESS_KEY}
+      # S3-compatible store (Cloudflare R2, MinIO). Empty = plain AWS S3, the
+      # SDK derives the host from BUCKET_REGION. This block names every
+      # variable the container gets, so a new one the backend learns to read
+      # must be added HERE too: on 29.10 the server .env had this set and the
+      # container never saw it (4 BUCKET_ vars inside, 0 BUCKET_ENDPOINT).
+      BUCKET_ENDPOINT: ${BUCKET_ENDPOINT:-}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
       COOKIE_SECURE: "true"      # cookies only over HTTPS in production
       # ── Added 2026-09-28: everything the server has learned to read since
