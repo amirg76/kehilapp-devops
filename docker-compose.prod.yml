@@ -18,8 +18,41 @@
 
 name: kehilapp
 
+# ── Container baseline (added 2026-11-03) ───────────────────────────────────
+# Every service merges this block. What each line buys:
+#   no-new-privileges  a process can never gain privileges it did not start
+#                      with (setuid binaries, file capabilities are ignored).
+#   cap_drop ALL       start from zero Linux capabilities; each service adds
+#                      back only what it was measured to need (cap_add below).
+#   logging local      Docker's json-file default never rotates: the idle
+#                      mongo container wrote a 312 MB log in 5 days. `local`
+#                      rotates and compresses; 3 files x 10 MB per container.
+# The cap_add sets were tested on the server with throwaway containers before
+# this file changed (runbooks/00, "Hardening pass 2026-11-03"): nginx needs
+# CHOWN/SETUID/SETGID (master as root, workers drop to the nginx user) plus
+# NET_BIND_SERVICE for :80; mongo's entrypoint needs CHOWN/SETUID/SETGID to
+# hand /data/db to uid 999; the backend runs as `node` and needs none.
+x-baseline: &baseline
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: [ALL]
+  logging:
+    driver: local
+    options:
+      max-size: "10m"
+      max-file: "3"
+
 services:
   mongo:
+    <<: *baseline
+    # DAC_OVERRIDE: the entrypoint runs `find /data/db ! -user mongodb` as
+    # root, and the EXISTING data dirs are mode 700 owned by uid 999. Without
+    # it: "find: '/data/db/journal': Permission denied" and a restart loop
+    # (3.11 deploy). The throwaway test missed it: its volume was empty.
+    cap_add: [CHOWN, SETUID, SETGID, DAC_OVERRIDE]
+    # Measured 107 MiB / 35 pids idle (3.11). mongod sizes its cache from
+    # this limit, not from the host's 16 GB.
+    mem_limit: 1g
+    pids_limit: 200
     image: mongo:7
     restart: always
     volumes:
@@ -32,6 +65,14 @@ services:
     networks: [kehilnet]
 
   backend:
+    <<: *baseline
+    # Runs as `node` (uid 1000) with zero effective capabilities already.
+    # Measured 54 MiB / 12 pids idle (3.11). Uploads are held in memory by
+    # multer (memoryStorage, 1 file, 5 MB max); nginx's 25m body limit is
+    # only the outer cap. See runbooks/00, "Hardening pass 2026-11-03", for
+    # the upload test under this limit.
+    mem_limit: 512m
+    pids_limit: 100
     image: ${REGISTRY:-ghcr.io/OWNER}/kehilapp-backend:${TAG:-latest}
     restart: always
     # Docker's own init (tini) as PID 1: reaps zombies and forwards signals so
@@ -92,6 +133,10 @@ services:
     networks: [kehilnet]
 
   frontend:
+    <<: *baseline
+    cap_add: [CHOWN, SETUID, SETGID, NET_BIND_SERVICE]
+    mem_limit: 64m      # measured 4.5 MiB / 5 pids (3.11)
+    pids_limit: 50
     image: ${REGISTRY:-ghcr.io/OWNER}/kehilapp-frontend:${TAG:-latest}
     restart: always
     volumes:
@@ -99,6 +144,10 @@ services:
     networks: [kehilnet]
 
   admin:
+    <<: *baseline
+    cap_add: [CHOWN, SETUID, SETGID, NET_BIND_SERVICE]
+    mem_limit: 64m      # measured 4.4 MiB / 5 pids (3.11)
+    pids_limit: 50
     image: ${REGISTRY:-ghcr.io/OWNER}/kehilapp-admin:${TAG:-latest}
     restart: always
     volumes:
@@ -107,6 +156,10 @@ services:
 
   # Internal path-routing edge (private). Caddy sits in front of THIS.
   proxy:
+    <<: *baseline
+    cap_add: [CHOWN, SETUID, SETGID, NET_BIND_SERVICE]
+    mem_limit: 64m      # measured 4.5 MiB / 5 pids (3.11)
+    pids_limit: 50
     image: nginx:1.27-alpine
     restart: always
     volumes:
@@ -116,7 +169,16 @@ services:
 
   # Public TLS terminator. Reads Caddyfile → gets/renews certs automatically.
   caddy:
-    image: caddy:2.10-alpine   # pinned minor, see shared-proxy/docker-compose.yml
+    <<: *baseline
+    # Runs as root inside the container; with cap_drop ALL it keeps only the
+    # right to bind 80/443. Only this service's AWS path (prod.yml alone) uses
+    # it: docker/caddy/Caddyfile passed `caddy validate` on 2.11.7 and the
+    # image+caps served :80 in a throwaway test (3.11); a full AWS deploy with
+    # this file has not run.
+    cap_add: [NET_BIND_SERVICE]
+    mem_limit: 256m
+    pids_limit: 100
+    image: caddy:2.11-alpine   # pinned minor, see shared-proxy/docker-compose.yml
     restart: always
     environment:
       # Injected into the container so the Caddyfile's {$DOMAIN}/{$ACME_EMAIL}
