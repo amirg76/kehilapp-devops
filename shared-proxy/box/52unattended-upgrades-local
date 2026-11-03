@@ -1,0 +1,13 @@
+// Shared box reboot policy (2026-11-03). Installed as
+// /etc/apt/apt.conf.d/52unattended-upgrades-local, which sorts after the
+// distro's 50unattended-upgrades and overrides it.
+//
+// Security updates already install daily. A kernel update only takes effect
+// after a reboot, and the default never reboots: a patched-but-not-running
+// kernel. With this, the box reboots ONLY when an update asked for it
+// (/var/run/reboot-required), at 01:30 UTC (03:30/04:30 in Israel).
+// Every container has `restart: always` and docker is enabled at boot, so the
+// sites come back by themselves; post-reboot-check.service proves it.
+Unattended-Upgrade::Automatic-Reboot "true";
+Unattended-Upgrade::Automatic-Reboot-WithUsers "true";
+Unattended-Upgrade::Automatic-Reboot-Time "01:30";
