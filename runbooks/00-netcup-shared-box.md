@@ -328,6 +328,48 @@ The 312 MB json log went with the old mongo container. One json-file log
 remains on the box: `clinicdemo-web`, another tenant. Rule 5 of
 ADDING-A-TENANT applies to it; that change belongs to its own project.
 
+## Database: no local mongo, and a backup that was actually restored (3.11)
+
+**The local mongo is gone from this box.** The backend has always talked to
+Atlas. Measured first: inside the backend `MONGO_URI` contains `mongodb.net`
+(count 1) and not `mongo:27017` (count 0); the local mongo held only
+`admin`/`config`/`local`; its only connections in 24 h were its own
+healthcheck. `docker-compose.netcup.yml` now puts it behind the `local-db`
+profile and resets the backend's `depends_on`. Removal: `rm -s -f mongo`,
+`up -d` (nothing recreated, backend restarts 0), then the 360 MB
+`kehilapp_mongo_data` volume. `/`, `/admin/`, `/readyz` (`db: up`) and
+`/api/messages` all answered correctly afterwards. Freed ~400 MB disk and
+~80 MiB RAM.
+
+**Atlas free (M0) has no backup of its own** (Atlas docs: "Atlas backups are
+not available for Free clusters"; an optional $0.10/day snapshot add-on is in
+private preview only). MongoDB's own recommendation is `mongodump` /
+`mongorestore`, so the drill used exactly that:
+
+```bash
+# On the box. The connection string goes from .env into a mode-600 YAML file
+# and mongodump reads it with --config: it never appears on a command line.
+umask 077; W=$(mktemp -d)
+printf 'uri: "%s"\n' "$(grep -m1 '^MONGO_URI=' /opt/kehilapp/.env | cut -d= -f2-)" > "$W/dump.yaml"
+docker run --rm --user "$(id -u):$(id -g)" -v "$W":/w mongo:7 \
+  mongodump --config=/w/dump.yaml --db=kehilapp_demo --archive=/w/k.archive --gzip
+rm "$W/dump.yaml"
+docker run -d --name t-restore mongo:7          # throwaway target
+docker cp "$W/k.archive" t-restore:/tmp/ && docker exec t-restore \
+  mongorestore --archive=/tmp/k.archive --gzip
+docker rm -f -v t-restore; rm -rf "$W"          # -v: no orphan volumes
+```
+
+Result: `messages 24, users 7, categories 7` dumped (1 s, 5,119 bytes),
+`38 document(s) restored successfully. 0 failed`, the same counts in the
+restored copy, and the live API agreeing (19 public + 5 members-only = 24
+messages, 7 categories). Two traps on the way: the container could not read
+a 600 file owned by `deploy` until it ran as `--user deploy`, and
+`docker rm -f` without `-v` left four anonymous volumes (removed).
+
+Not yet in place: a SCHEDULED dump stored off the box. Until then this is
+a proven procedure, not a backup.
+
 ## First-run notes (2026-10-29, Hostinger KVM 4, Ubuntu 24.04.5)
 
 What the dry text above did not know, recorded from the real outputs:
