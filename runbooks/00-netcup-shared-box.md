@@ -290,6 +290,44 @@ file sets headers with dots, timeouts or streaming, and both validated.
 **Rollback:** revert the commit, `git pull` on the box, `up -d` for both
 stacks. No data changes; volumes are untouched.
 
+### Deploy result (3.11, ~15:53–15:56 UTC)
+
+**About 3 minutes of downtime for kehilapp.** The first `up -d` put mongo in a
+restart loop: `find: '/data/db/journal': Permission denied`. The mongo
+entrypoint runs `find /data/db ! -user mongodb` as root, and the existing
+data directories are mode 700 owned by uid 999; with `cap_drop: [ALL]` root
+can no longer traverse them. The backend waits for a healthy mongo, so the
+API was down. Fixed by adding `DAC_OVERRIDE` to mongo (commit 656b3f2),
+then `git pull` + `up -d`: all five healthy in 10 s.
+**Lesson:** T3 passed only because the throwaway mongo had an empty volume.
+Test a stateful service against a copy of its real data, not a fresh one.
+
+Second trap, same day: the deploy script was streamed with
+`ssh ... bash -s`, and `docker compose exec -T caddy caddy validate` read
+stdin and swallowed the rest of the script, so the verification part never
+ran. Every `exec` in a streamed script gets `</dev/null`.
+
+Verified after the fix (from the box and from outside):
+
+```
+caddy v2.11.7, Valid configuration, 0 error log lines since the switch
+/ 200 resident marker 1 · /admin/ 200 admin marker 1 · all /assets/ 200
+Server: nginx  (no version) · HSTS 1 · CSP 1 · certificate unchanged (to 27.1.2027)
+clinicdemo (the other tenant behind the shared Caddy): 200 before and after
+every kehilapp + caddy container: no-new-privileges, CapDrop ALL, its cap_add,
+  mem/pids limits, log driver local, restarts 0, OOMKilled false
+CapBnd of PID 1 (negative control; was a80425fb): nginx 4c1, caddy 400,
+  mongo c3, backend 0 · NoNewPrivs 1 everywhere
+upload through the real stack: 4,841,538-byte PNG → POST 200 → signed URL
+  200, identical bytes → DELETE 200; backend restarts 0, OOMKilled false
+memory now: mongo 78 MiB/1 GiB, backend 50/512, nginx ~4.5/64, caddy 13/256
+from outside: 22/80/443 open; 2375, 3000, 5001, 6379, 8080, 27017 closed
+```
+
+The 312 MB json log went with the old mongo container. One json-file log
+remains on the box: `clinicdemo-web`, another tenant. Rule 5 of
+ADDING-A-TENANT applies to it; that change belongs to its own project.
+
 ## First-run notes (2026-10-29, Hostinger KVM 4, Ubuntu 24.04.5)
 
 What the dry text above did not know, recorded from the real outputs:
