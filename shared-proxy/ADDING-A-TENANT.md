@@ -11,7 +11,7 @@ ufw allowing 22/80/443 only, `/opt/shared-proxy` = this folder, `/opt/<project>`
 per tenant. The IP and SSH key name live in the owner's project registry, not
 in this public repo.
 
-## The four rules
+## The five rules
 
 1. **No `ports:` in your compose file.** Docker's published ports bypass ufw.
    Only `shared-proxy` publishes 80/443. A tenant that publishes a port is
@@ -27,6 +27,15 @@ in this public repo.
    things (hostname, container name, port). Keep the HSTS header.
 4. **Your secrets live in `/opt/<project>/.env`, mode 600, owned by `deploy`.**
    Never in git, never in the compose file, never in the Caddy file.
+5. **Every container gets the box baseline** (since 2026-11-03):
+   `no-new-privileges`, `cap_drop: [ALL]` plus only the capabilities it needs,
+   a `mem_limit` and `pids_limit`, and the `local` log driver. Docker's default
+   log driver never rotates: kehilapp's idle mongo wrote 312 MB in five days.
+   Find your capability set with a throwaway container before you change the
+   live one (runbooks/00, "Hardening pass 2026-11-03"). Common sets measured
+   on this box: official nginx images `CHOWN SETUID SETGID NET_BIND_SERVICE`,
+   `mongo:7` `CHOWN SETUID SETGID`, Caddy `NET_BIND_SERVICE`, a Node image
+   running as a non-root `USER` none at all.
 
 ## Compose overlay (what your project needs)
 
@@ -36,6 +45,14 @@ services:
     container_name: careerflow-web
     networks: [default, edge]
     # no ports:
+    security_opt: ["no-new-privileges:true"]   # rule 5
+    cap_drop: [ALL]
+    # cap_add: [...]          only what a throwaway test proved it needs
+    mem_limit: 512m           # measure with `docker stats --no-stream`, then add headroom
+    pids_limit: 100
+    logging:
+      driver: local
+      options: { max-size: "10m", max-file: "3" }
 networks:
   edge:
     external: true

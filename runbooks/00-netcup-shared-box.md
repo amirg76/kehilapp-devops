@@ -241,6 +241,55 @@ Check before seeding: `grep -c 'mongodb.net/kehilapp_demo?' .env` must be 1.
 
 Full checklist for a new tenant: `shared-proxy/ADDING-A-TENANT.md`.
 
+## Hardening pass 2026-11-03
+
+Checked against current guidance (Docker engine security, logging and
+resource-constraint docs, OWASP Docker cheat sheet, Caddy releases) and
+measured on the box before anything changed:
+
+- **Logs never rotated.** Docker's default `json-file` driver keeps
+  everything. The idle `kehilapp-mongo-1` (unused: the backend talks to Atlas)
+  had written **312 MB in 5 days**. No `/etc/docker/daemon.json` existed.
+- **No container had limits.** `HostConfig.Memory=0`, no `pids_limit`, no
+  `cap_drop`, no `no-new-privileges` on any kehilapp or shared-proxy
+  container. Idle usage: mongo 107 MiB/35 pids, backend 54 MiB/12, each
+  nginx ~4.5 MiB/5, Caddy 14 MiB/10, of 16 GB.
+- **Caddy 2.10.2**, while 2.11.7 (3.10.2026) carries the 2.11.x security fixes.
+- **`Server: nginx/1.27.5`** on every public response (measured from outside).
+- Already fine, measured: unattended-upgrades enabled and active (security
+  updates daily, `Automatic-Reboot` unset = off), no reboot pending, Docker
+  29.9.2 = latest 29.x, only 22/80/443 answer from outside (16 ports probed).
+
+**What changed** (compose + nginx config only, same images):
+
+1. Every kehilapp service merges `x-baseline` in `docker-compose.prod.yml`:
+   `no-new-privileges`, `cap_drop: [ALL]`, `local` log driver (3 x 10 MB).
+   Each service adds back only what it was shown to need, and gets a
+   `mem_limit`/`pids_limit` with headroom over the measurement.
+2. `shared-proxy`: `caddy:2.11-alpine` with the same baseline, keeping only
+   `NET_BIND_SERVICE`.
+3. `server_tokens off;` in both nginx conf.d files.
+
+**How the capability sets were found:** throwaway containers on the box
+(names `t-*`, no published ports, removed afterwards; live containers
+untouched), each started with the new flags:
+
+```
+T1 nginx:1.27-alpine + reverse-proxy.conf on kehilnet, caps CHOWN SETUID SETGID NET_BIND_SERVICE
+   HTTP/1.1 200 OK, Server: nginx, resident marker 1, admin marker 1, {"status":"ok","db":"up"}
+T2 kehilapp-frontend image + spa conf, same caps      -> Server: nginx, marker 1
+T3 mongo:7, caps CHOWN SETUID SETGID                  -> ping ok after 5 s
+T4 caddy:2.11-alpine (v2.11.7), cap NET_BIND_SERVICE  -> :80 answered
+T5 caddy validate, REAL Caddyfile + sites/*.caddy, 2.11 -> Valid configuration
+```
+
+Caddy 2.11.6 tightened defaults (16 KiB request headers, 1-minute idle
+read/write timeouts, request headers containing `.` dropped). Neither site
+file sets headers with dots, timeouts or streaming, and both validated.
+
+**Rollback:** revert the commit, `git pull` on the box, `up -d` for both
+stacks. No data changes; volumes are untouched.
+
 ## First-run notes (2026-10-29, Hostinger KVM 4, Ubuntu 24.04.5)
 
 What the dry text above did not know, recorded from the real outputs:

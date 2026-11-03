@@ -18,8 +18,9 @@
 # The request chain is unchanged — client → Caddy → nginx → backend — so
 # TRUST_PROXY_HOPS stays "2" (set in prod.yml).
 #
-# NOT YET RUN ON A REAL BOX (written before the server was bought). Verified
-# locally only with `docker compose ... config` — see runbooks/00.
+# Running on the shared box since 2026-10-29 (runbooks/00). The container
+# baseline (capabilities, limits, log rotation) comes from prod.yml and is
+# merged unchanged — this file adds nothing to it.
 # ─────────────────────────────────────────────────────────────────────────────
 
 services:

@@ -16,7 +16,7 @@
 #     docker compose up -d
 #     docker compose exec caddy caddy validate --config /etc/caddy/Caddyfile
 #
-# NOT YET RUN ON A REAL BOX (written before the server was bought).
+# Running on the shared box since 2026-10-29 (runbooks/00).
 # ─────────────────────────────────────────────────────────────────────────────
 
 name: shared-proxy
@@ -25,8 +25,27 @@ services:
   caddy:
     # Pinned minor: X-Forwarded-For from an untrusted client is dropped since
     # Caddy 2.5; a floating "2" tag could also jump a major one day. Bump on purpose.
-    image: caddy:2.10-alpine
+    # 2.10 → 2.11 on 2026-11-03 for the 2.11.x security fixes. 2.11.6 tightened
+    # defaults (16 KiB request headers, 1-minute idle read/write timeouts,
+    # headers containing "." dropped) — "Breaking changes" in
+    # https://github.com/caddyserver/caddy/releases/tag/v2.11.6. The real
+    # Caddyfile + every sites/*.caddy passed `caddy validate` on 2.11.7 before
+    # the switch.
+    image: caddy:2.11-alpine
     restart: always
+    # Container baseline, same as every kehilapp service (docker-compose.prod.yml):
+    # no privilege gain, zero capabilities except binding 80/443, bounded
+    # memory/processes, rotated logs. Tested with a throwaway container first.
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    mem_limit: 256m     # measured 14 MiB / 10 pids with two sites (3.11)
+    pids_limit: 100
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
       # Let's Encrypt expiry notices go here. Set in /opt/shared-proxy/.env.
       ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in /opt/shared-proxy/.env}
