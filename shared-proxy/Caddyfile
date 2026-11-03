@@ -15,7 +15,7 @@
 #   }
 #
 # The upstream is reachable because the project's container joined the
-# `edge` network (see kehilapp's docker-compose.netcup.yml for the pattern).
+# `edge` network (see kehilapp's docker-compose.shared-box.yml for the pattern).
 import sites/*.caddy
 
 # Anything that arrives by bare IP or an unknown hostname over plain HTTP gets a

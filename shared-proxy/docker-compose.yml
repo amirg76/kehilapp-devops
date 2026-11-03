@@ -1,5 +1,5 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# The ONE public entry point of the shared demo box (netcup). Decided 2026-10-11.
+# The ONE public entry point of the shared demo box (Hostinger). Decided 2026-10-11.
 #
 # Every project on the box runs its own compose stack with NO published ports;
 # each one joins the box-wide `edge` network and gets a site block under

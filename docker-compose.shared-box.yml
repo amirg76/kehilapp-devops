@@ -1,9 +1,9 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# netcup OVERRIDE — layer this on top of docker-compose.prod.yml on the SHARED
+# SHARED-BOX OVERRIDE — layer this on top of docker-compose.prod.yml on the SHARED
 # demo box. Decided 2026-10-11: the box has ONE public entry point for every
 # project (shared-proxy/), so this project's own Caddy must not bind 80/443.
 #
-#     docker compose -f docker-compose.prod.yml -f docker-compose.netcup.yml \
+#     docker compose -f docker-compose.prod.yml -f docker-compose.shared-box.yml \
 #                    --env-file .env up -d
 #
 # What it changes, and nothing else (item 3 added 2026-11-03):

@@ -1,7 +1,7 @@
 # 01 — Initial server setup (zero → running) — the AWS showcase box
 
-> For the always-on demo on the **shared netcup box**, use
-> [runbook 00](00-netcup-shared-box.md) instead: that box has no Terraform,
+> For the always-on demo on the **shared box**, use
+> [runbook 00](00-shared-box.md) instead: that box has no Terraform,
 > no pre-installed Docker, and a shared entry point instead of this project's Caddy.
 
 Do this **once**, right after `terraform apply` created the box. It gets the

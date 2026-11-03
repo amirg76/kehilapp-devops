@@ -79,7 +79,7 @@ jobs:
           persist-credentials: false
 
       # Two targets share these images (decision D-ORC-06 + ADR-1): the
-      # always-on demo on netcup (x86) and the Terraform showcase on AWS
+      # always-on demo on the shared box (x86) and the Terraform showcase on AWS
       # (t4g = ARM Graviton, terraform/variables.tf). QEMU lets one runner
       # build both; a multi-arch manifest means `docker compose pull` on
       # either box gets the right one without any change to the compose file.

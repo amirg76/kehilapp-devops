@@ -28,8 +28,8 @@ fail=$(check)
 if [ -n "$fail" ]; then
   echo "$(date -Is) first check failed:$fail (running=$running), bringing stacks up" | tee -a "$LOG"
   (cd /opt/shared-proxy && docker compose up -d) >/dev/null 2>&1
-  (cd /opt/kehilapp && docker compose -f docker-compose.prod.yml -f docker-compose.netcup.yml --env-file .env up -d \
-    && docker compose -f docker-compose.prod.yml -f docker-compose.netcup.yml --env-file .env restart proxy) >/dev/null 2>&1
+  (cd /opt/kehilapp && docker compose -f docker-compose.prod.yml -f docker-compose.shared-box.yml --env-file .env up -d \
+    && docker compose -f docker-compose.prod.yml -f docker-compose.shared-box.yml --env-file .env restart proxy) >/dev/null 2>&1
   sleep 60
   fail=$(check)
 fi
