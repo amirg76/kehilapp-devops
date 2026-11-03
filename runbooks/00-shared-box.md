@@ -28,9 +28,9 @@ two managers of one Docker collide.
 - The provider's confirmation: IP address and root password (you'll stop using
   it in step 1). First run: Hostinger KVM 4, 4 vCPU / 16 GB / 200 GB NVMe.
 - An SSH key on your laptop, **with a passphrase**, loaded in an agent:
-  `ssh-keygen -t ed25519 -f ~/.ssh/hostinger-shared -C <label>`, then
-  `ssh-add ~/.ssh/hostinger-shared`. Prove the file is locked:
-  `ssh-keygen -y -f ~/.ssh/hostinger-shared` must *ask* for the passphrase.
+  `ssh-keygen -t ed25519 -f ~/.ssh/<key-name> -C <label>`, then
+  `ssh-add ~/.ssh/<key-name>`. Prove the file is locked:
+  `ssh-keygen -y -f ~/.ssh/<key-name>` must *ask* for the passphrase.
   (`ssh-keygen -p` without `-f` defaults to a *different* key — always `-f`.)
 - Hostinger DNS access for `letstalkanddesign.com`.
 - The values for the kehilapp `.env` (README table "Server .env"): Atlas SRV
