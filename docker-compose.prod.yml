@@ -44,7 +44,11 @@ x-baseline: &baseline
 services:
   mongo:
     <<: *baseline
-    cap_add: [CHOWN, SETUID, SETGID]
+    # DAC_OVERRIDE: the entrypoint runs `find /data/db ! -user mongodb` as
+    # root, and the EXISTING data dirs are mode 700 owned by uid 999. Without
+    # it: "find: '/data/db/journal': Permission denied" and a restart loop
+    # (3.11 deploy). The throwaway test missed it: its volume was empty.
+    cap_add: [CHOWN, SETUID, SETGID, DAC_OVERRIDE]
     # Measured 107 MiB / 35 pids idle (3.11). mongod sizes its cache from
     # this limit, not from the host's 16 GB.
     mem_limit: 1g
