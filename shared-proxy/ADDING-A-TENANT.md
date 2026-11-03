@@ -60,7 +60,7 @@ networks:
 
 If your project already ships its own Caddy (like kehilapp does), put it
 behind a compose profile so it does not start on this box — see
-`docker-compose.netcup.yml` in the repo root for the pattern.
+`docker-compose.shared-box.yml` in the repo root for the pattern.
 
 ## Steps on the box (as `deploy`)
 

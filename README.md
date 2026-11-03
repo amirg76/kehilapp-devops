@@ -19,7 +19,7 @@ new code ships (GitHub Actions), and the step-by-step guides to run it all
 | `docker-compose.prod.yml` | **The server version** — it *pulls* pre-built images (from GHCR) instead of building, and adds Caddy for automatic HTTPS. Why: the server stays dumb and fast — pull image, restart. | גרסת השרת — מושכת images מוכנים ומוסיפה Caddy ל-HTTPS אוטומטי. |
 | `.env.example` | Template for the **one secrets/config file** the stack reads. Copy to `.env` (never committed). | תבנית לקובץ הסודות היחיד. |
 | `terraform/` | **Creates the AWS server** (one EC2 box + firewall + fixed IP + SSH key) as code. Why: reproducible, reviewable, and `terraform destroy` stops the bill instantly. | יוצר את שרת ה-AWS כקוד. |
-| `.github/workflows/build-images.yml` | **Builds the three images and pushes them to GHCR** — on demand (Actions → Run workflow) and when the Docker files change. Deploying to the netcup demo is a manual `pull` + `up` on the server (runbook 02). `deploy.yml` is the **AWS showcase** deploy: run by hand after `terraform apply`, it SSHes into the new box and pulls the requested tag. | בונה את שלוש התמונות (לשני סוגי מעבד) ומעלה למאגר. הדמו הקבוע — פריסה ידנית (מדריך 02); `deploy.yml` — התקנה על שרת ההדגמה ב-AWS. |
+| `.github/workflows/build-images.yml` | **Builds the three images and pushes them to GHCR** — on demand (Actions → Run workflow) and when the Docker files change. Deploying to the shared demo box is a manual `pull` + `up` on the server (runbook 02). `deploy.yml` is the **AWS showcase** deploy: run by hand after `terraform apply`, it SSHes into the new box and pulls the requested tag. | בונה את שלוש התמונות (לשני סוגי מעבד) ומעלה למאגר. הדמו הקבוע — פריסה ידנית (מדריך 02); `deploy.yml` — התקנה על שרת ההדגמה ב-AWS. |
 | `runbooks/` | **Exact command guides** for setup, deploy, rollback, logs, SSL, SSH. Why: 2am incidents shouldn't need improvisation. | מדריכי פקודות מדויקים. |
 | `COST-ESTIMATE.md` | Detailed monthly $ for dev + prod. | הערכת עלות חודשית. |
 
@@ -90,7 +90,7 @@ docker compose up --build
 Two targets, one set of images:
 
 1. **The always-on demo** — the link in a CV — runs on **one shared VPS
-   (netcup, 16 GB) shared with other small projects**. Deployed by
+   (Hostinger, 16 GB) shared with other small projects**. Deployed by
    hand: `docker compose pull` + `up -d` (runbook 02).
 2. **The AWS showcase** — `terraform apply` creates a box, the manual
    `deploy (AWS showcase)` workflow puts the app on it, you verify and record,
@@ -99,14 +99,14 @@ Two targets, one set of images:
 
 What that means for this repo:
 
-- `build-images.yml` builds every image for **both** x86 (netcup) and arm64
+- `build-images.yml` builds every image for **both** x86 (the shared box) and arm64
   (the AWS box is `t4g`, ARM Graviton — `terraform/variables.tf`), so either
   box pulls the right one with the same compose file.
 - `docker-compose.prod.yml` is what runs on both. On the AWS box it runs as
-  is, with its own Caddy on 80/443. On the SHARED netcup box (decided
+  is, with its own Caddy on 80/443. On the SHARED box (decided
   2026-10-11) no project binds a port: `shared-proxy/` is the box's single
   Caddy, routing by hostname to each project over a box-wide `edge` network,
-  and `docker-compose.netcup.yml` layers on top of prod.yml to leave this
+  and `docker-compose.shared-box.yml` layers on top of prod.yml to leave this
   project's Caddy out and put its nginx edge on that network. Runbook 00 is
   the zero-to-running guide for that box.
 - The database is **MongoDB Atlas**, database `kehilapp_demo`: put the SRV
@@ -170,10 +170,10 @@ terraform apply -var-file="prod.tfvars"
 # first-boot setup:       runbooks/01-initial-server-setup.md
 # HTTPS is automatic via Caddy once DNS resolves → runbooks/05-ssl-with-caddy-or-certbot.md
 # deploy: Actions → "deploy (AWS showcase)" → Run workflow (runbook 02, step 3)
-# (the "prod" workspace is part of the worked example; the real always-on demo is on netcup)
+# (the "prod" workspace is part of the worked example; the real always-on demo is on the shared box)
 ```
 
-**Order of the runbooks:** `00` the shared netcup box (always-on demo) **or**
+**Order of the runbooks:** `00` the shared box (always-on demo) **or**
 `01` the AWS showcase box → `02` deploy → `03` rollback (if needed)
 → `04` logs/monitoring → `05` SSL → `06` SSH.
 
@@ -188,7 +188,7 @@ kehilapp-devops/
 ├── .env.example                  the one secrets file (copy to .env)
 ├── docker-compose.yml            LOCAL: build + run everything
 ├── docker-compose.prod.yml       SERVER: pull images + Caddy HTTPS
-├── docker-compose.netcup.yml     SHARED BOX overlay: no own Caddy, nginx edge on the `edge` network
+├── docker-compose.shared-box.yml     SHARED BOX overlay: no own Caddy, nginx edge on the `edge` network
 ├── shared-proxy/                 the shared box's ONE Caddy (80/443), one sites/*.caddy per project
 │   ├── docker-compose.yml
 │   ├── Caddyfile                 imports sites/*.caddy
@@ -218,7 +218,7 @@ kehilapp-devops/
 │   ├── build-images.yml          build all 3 images (amd64+arm64) → GHCR, on demand
 │   └── deploy.yml                manual: SSH-deploy a tag to the AWS showcase box
 └── runbooks/
-    ├── 00-netcup-shared-box.md   bare Ubuntu → running demo on the shared box
+    ├── 00-shared-box.md   bare Ubuntu → running demo on the shared box
     ├── 01-initial-server-setup.md   the AWS showcase box (after terraform apply)
     ├── 02-deploy.md
     ├── 03-rollback.md

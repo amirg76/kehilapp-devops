@@ -1,12 +1,12 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# netcup OVERRIDE — layer this on top of docker-compose.prod.yml on the SHARED
+# SHARED-BOX OVERRIDE — layer this on top of docker-compose.prod.yml on the SHARED
 # demo box. Decided 2026-10-11: the box has ONE public entry point for every
 # project (shared-proxy/), so this project's own Caddy must not bind 80/443.
 #
-#     docker compose -f docker-compose.prod.yml -f docker-compose.netcup.yml \
+#     docker compose -f docker-compose.prod.yml -f docker-compose.shared-box.yml \
 #                    --env-file .env up -d
 #
-# What it changes, and nothing else:
+# What it changes, and nothing else (item 3 added 2026-11-03):
 #   1. `caddy` moves behind a profile, so a plain `up -d` does not start it.
 #      (Compose cannot delete a service from an override; a profile is the
 #      documented way to leave one out.) The AWS showcase box, which is NOT
@@ -26,6 +26,20 @@
 services:
   caddy:
     profiles: ["standalone"]
+
+  # 3. (2026-11-03) No local mongo on the shared box. The backend talks to
+  #    Atlas (MONGO_URI in .env); measured on the box before this change: the
+  #    local mongo held only admin/config/local, its only connections were its
+  #    own healthcheck, and it still wrote 312 MB of logs in 5 days and held a
+  #    360 MB volume. Behind a profile it never starts here; the AWS showcase
+  #    (prod.yml alone) keeps it. `--profile local-db` brings it back.
+  mongo:
+    profiles: ["local-db"]
+
+  # The backend no longer waits for a container that is not there. `!reset`
+  # empties the depends_on inherited from prod.yml (Compose >= 2.24).
+  backend:
+    depends_on: !reset {}
 
   proxy:
     # A fixed name is the address the shared Caddy proxies to. It also means

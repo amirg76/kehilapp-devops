@@ -1,0 +1,14 @@
+# Installed as /etc/systemd/system/post-reboot-check.service, enabled once.
+# Runs /usr/local/sbin/post-reboot-check.sh after every boot (see that file).
+[Unit]
+Description=Prove the shared box sites came back after boot
+Wants=network-online.target docker.service
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/post-reboot-check.sh
+TimeoutStartSec=600
+
+[Install]
+WantedBy=multi-user.target

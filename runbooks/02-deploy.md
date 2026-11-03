@@ -1,7 +1,7 @@
 # 02 — Deploying a new version
 
 Two steps: **build** (GitHub Actions, on demand) and **deploy** — by hand on
-the netcup demo box, or through the `deploy (AWS showcase)` workflow on a box
+the shared demo box, or through the `deploy (AWS showcase)` workflow on a box
 Terraform just created. Two targets, one set of images; see the README.
 
 About `deploy.yml`: its first version (31.8) tested, built and SSH-deployed on
@@ -24,7 +24,7 @@ and with this repo's short commit SHA.
 Watch it in the **Actions** tab. A red job means no image was pushed for that
 service; the others are unaffected.
 
-## Step 2 — Deploy to the netcup demo box (by hand, on the box)
+## Step 2 — Deploy to the shared demo box (by hand, on the box)
 
 ```bash
 ssh -i ~/.ssh/kehilapp ubuntu@<IP>
@@ -38,8 +38,8 @@ export TAG=latest                     # or dev, or a specific 7-char git sha
 # Both -f files, always: the second one keeps this project's Caddy off and
 # puts the nginx edge on the shared `edge` network (runbook 00). Without it,
 # compose would try to bind 80/443 and collide with the box's shared proxy.
-docker compose -f docker-compose.prod.yml -f docker-compose.netcup.yml --env-file .env pull
-docker compose -f docker-compose.prod.yml -f docker-compose.netcup.yml --env-file .env up -d
+docker compose -f docker-compose.prod.yml -f docker-compose.shared-box.yml --env-file .env pull
+docker compose -f docker-compose.prod.yml -f docker-compose.shared-box.yml --env-file .env up -d
 docker image prune -f                 # free disk from the old image
 ```
 

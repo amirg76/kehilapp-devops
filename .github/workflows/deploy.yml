@@ -2,7 +2,7 @@
 # Deploy to the AWS SHOWCASE box — manual, one job.
 #
 # WHERE THIS FITS (decision D-ORC-06 + ADR-1, 2026-09-28):
-#   • The always-on demo lives on a shared netcup VPS. It is deployed by hand
+#   • The always-on demo lives on a shared VPS (Hostinger). It is deployed by hand
 #     with the two compose commands in runbooks/02-deploy.md.
 #   • AWS is a DEMONSTRATION: `terraform apply` creates a box, this workflow
 #     puts the app on it, you verify and record, `terraform destroy` removes

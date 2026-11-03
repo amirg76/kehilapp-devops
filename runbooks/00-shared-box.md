@@ -114,7 +114,7 @@ docker --version && docker compose version
 ## 4. The box-wide network and the shared entry point
 
 > `git clone` fetches `main`. The files used below exist on `main` only once
-> the pull request that added them (`shared-proxy/`, `docker-compose.netcup.yml`,
+> the pull request that added them (`shared-proxy/`, `docker-compose.shared-box.yml`,
 > this runbook) has been merged. Check on GitHub first.
 
 **What `edge` means:** every container on it can reach every other one on it
@@ -167,15 +167,15 @@ Fill in every "yes" row of the README table ("Server .env"). On this box:
 - `ALLOWED_ORIGINS=https://kehilapp.letstalkanddesign.com`
 - `MONGO_URI` = the Atlas SRV string for database `kehilapp_demo`
 - `DOMAIN` / `ACME_EMAIL` may stay empty: the project's own Caddy is not
-  started here (docker-compose.netcup.yml), the shared one holds the certificate.
+  started here (docker-compose.shared-box.yml), the shared one holds the certificate.
 
 Then, in **Atlas → Network Access**, allow `<IP>/32` (replace the temporary
 `0.0.0.0/0`).
 
 ```bash
-docker compose -f docker-compose.prod.yml -f docker-compose.netcup.yml --env-file .env pull
-docker compose -f docker-compose.prod.yml -f docker-compose.netcup.yml --env-file .env up -d
-docker compose -f docker-compose.prod.yml -f docker-compose.netcup.yml ps
+docker compose -f docker-compose.prod.yml -f docker-compose.shared-box.yml --env-file .env pull
+docker compose -f docker-compose.prod.yml -f docker-compose.shared-box.yml --env-file .env up -d
+docker compose -f docker-compose.prod.yml -f docker-compose.shared-box.yml ps
 ```
 **Done =** mongo, backend, frontend, admin, proxy are `Up`; **no** `caddy`
 line (it sits behind the `standalone` profile); `docker ps` shows no project
@@ -209,7 +209,7 @@ verify, log in. If the verification link points at the wrong host,
 ## 8. Seed demo data (once)
 
 ```bash
-docker compose -f docker-compose.prod.yml -f docker-compose.netcup.yml --env-file .env \
+docker compose -f docker-compose.prod.yml -f docker-compose.shared-box.yml --env-file .env \
   exec -T -e NODE_ENV=development backend node scripts/seedDemo.js
 ```
 Two guards, both on purpose: it refuses `NODE_ENV=production` (compose sets
@@ -327,6 +327,89 @@ from outside: 22/80/443 open; 2375, 3000, 5001, 6379, 8080, 27017 closed
 The 312 MB json log went with the old mongo container. One json-file log
 remains on the box: `clinicdemo-web`, another tenant. Rule 5 of
 ADDING-A-TENANT applies to it; that change belongs to its own project.
+
+## Database: no local mongo, and a backup that was actually restored (3.11)
+
+**The local mongo is gone from this box.** The backend has always talked to
+Atlas. Measured first: inside the backend `MONGO_URI` contains `mongodb.net`
+(count 1) and not `mongo:27017` (count 0); the local mongo held only
+`admin`/`config`/`local`; its only connections in 24 h were its own
+healthcheck. `docker-compose.shared-box.yml` now puts it behind the `local-db`
+profile and resets the backend's `depends_on`. Removal: `rm -s -f mongo`,
+`up -d` (nothing recreated, backend restarts 0), then the 360 MB
+`kehilapp_mongo_data` volume. `/`, `/admin/`, `/readyz` (`db: up`) and
+`/api/messages` all answered correctly afterwards. Freed ~400 MB disk and
+~80 MiB RAM.
+
+**Atlas free (M0) has no backup of its own** (Atlas docs: "Atlas backups are
+not available for Free clusters"; an optional $0.10/day snapshot add-on is in
+private preview only). MongoDB's own recommendation is `mongodump` /
+`mongorestore`, so the drill used exactly that:
+
+```bash
+# On the box. The connection string goes from .env into a mode-600 YAML file
+# and mongodump reads it with --config: it never appears on a command line.
+umask 077; W=$(mktemp -d)
+printf 'uri: "%s"\n' "$(grep -m1 '^MONGO_URI=' /opt/kehilapp/.env | cut -d= -f2-)" > "$W/dump.yaml"
+docker run --rm --user "$(id -u):$(id -g)" -v "$W":/w mongo:7 \
+  mongodump --config=/w/dump.yaml --db=kehilapp_demo --archive=/w/k.archive --gzip
+rm "$W/dump.yaml"
+docker run -d --name t-restore mongo:7          # throwaway target
+docker cp "$W/k.archive" t-restore:/tmp/ && docker exec t-restore \
+  mongorestore --archive=/tmp/k.archive --gzip
+docker rm -f -v t-restore; rm -rf "$W"          # -v: no orphan volumes
+```
+
+Result: `messages 24, users 7, categories 7` dumped (1 s, 5,119 bytes),
+`38 document(s) restored successfully. 0 failed`, the same counts in the
+restored copy, and the live API agreeing (19 public + 5 members-only = 24
+messages, 7 categories). Two traps on the way: the container could not read
+a 600 file owned by `deploy` until it ran as `--user deploy`, and
+`docker rm -f` without `-v` left four anonymous volumes (removed).
+
+Not yet in place: a SCHEDULED dump stored off the box. Until then this is
+a proven procedure, not a backup.
+
+**Atlas access list closed (3.11, in the Atlas UI).** `0.0.0.0/0` (any
+address) was deleted. Before that, the owner's current PC address was added
+(comment "amir-pc, added 3.11.2026"), because it was reachable ONLY through
+`0.0.0.0/0`. Left in the list: this box `/32`, the PC, the old
+`EC2-BACKEND-DEV` address, and an older "Auto Setup" address. Users: the
+box's `kehilapp_demo_srv` (`readWrite@kehilapp_demo` only) and an older
+admin user. Proof: `restart backend` forces new connections → healthy in 9 s,
+`DB connected`, `/readyz` `db: up`, `/api/messages` 200. A home IP that
+changes will need re-adding ("Add Current IP Address").
+
+## Reboots after kernel updates (3.11)
+
+Security updates install daily (unattended-upgrades). A kernel update only
+runs after a reboot, and Ubuntu's default never reboots. Now:
+`shared-proxy/box/52unattended-upgrades-local` → `/etc/apt/apt.conf.d/`
+turns on `Automatic-Reboot` at **01:30 UTC**, only when an update asked for
+it. `post-reboot-check.sh` + `.service` run after every boot: wait 2 min,
+check kehilapp `/`, `/admin/` and `/readyz` by content and clinicdemo by 200,
+bring both stacks up once more if anything failed, and log one line to
+`/var/log/post-reboot-check.log`.
+
+```bash
+B=/opt/kehilapp/shared-proxy/box
+sudo install -m 644 $B/52unattended-upgrades-local /etc/apt/apt.conf.d/
+sudo install -m 755 $B/post-reboot-check.sh /usr/local/sbin/
+sudo install -m 644 $B/post-reboot-check.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable post-reboot-check
+apt-config dump | grep -i automatic-reboot      # three lines, "true"/"01:30"
+sudo POST_REBOOT_SLEEP=0 /usr/local/sbin/post-reboot-check.sh   # test, no reboot
+```
+
+Proven on 3.11. Negative control first: a copy pointed at a wrong site failed
+on all three kehilapp checks and exited 1. Then one controlled reboot: boot
+17:59:01 UTC, SSH back on the 4th attempt, all six containers healthy, the
+check logged `2026-11-03T18:01:21 OK kernel=6.8.0-147-generic containers=6`,
+and kehilapp and clinicdemo answered with the right content. Downtime
+under two minutes.
+
+Not done: a phone alert when the check fails. The log line and
+`systemctl status post-reboot-check` are the signal for now.
 
 ## First-run notes (2026-10-29, Hostinger KVM 4, Ubuntu 24.04.5)
 
