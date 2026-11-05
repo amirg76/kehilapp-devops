@@ -5,6 +5,10 @@
 *.env
 !.env.example
 
+# Written on the box by scripts/deploy-shared-box.sh.
+.deploy-previous-tag
+.deploy-in-progress
+
 # SSH keys and certificates. A deploy repo is exactly where one gets dropped
 # "just for a second" and then committed.
 *.pem

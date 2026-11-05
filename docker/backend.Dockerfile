@@ -1,5 +1,5 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# Backend production image  (Node 20 / Express)
+# Backend production image  (Node 24 / Express)
 #
 # WHY multi-stage: the "builder" stage has all the npm machinery and dev files;
 # the final "runtime" stage copies ONLY what the app needs to run. Result: a
@@ -18,7 +18,7 @@
 # of under QEMU emulation. Together with the RUN-free runtime stage below, the
 # arm64 image builds anywhere buildx can pull arm64 base layers — no emulator
 # needed. If a native dependency is ever added, drop this flag.
-FROM --platform=$BUILDPLATFORM node:20-alpine AS deps
+FROM --platform=$BUILDPLATFORM node:24-alpine AS deps
 WORKDIR /app
 
 # Copy only the manifest first. Docker caches this layer, so `npm ci` re-runs
@@ -30,7 +30,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
 # ── Stage 2: final runtime image ────────────────────────────────────────────
-FROM node:20-alpine AS runtime
+FROM node:24-alpine AS runtime
 
 # NO `RUN` in this stage, on purpose. Every RUN executes a binary of the
 # TARGET architecture, which on an x86 builder means QEMU emulation for the

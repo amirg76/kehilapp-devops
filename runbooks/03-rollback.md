@@ -1,5 +1,9 @@
 # 03 — Rolling back a bad deploy
 
+**On the shared box, use `scripts/deploy-shared-box.sh rollback` (runbook 00) and not the
+steps below.** They are for the AWS showcase, and they would leave the box's `.env` and
+rollback record out of step with what is running.
+
 A deploy went out and something broke. Get back to the last good version fast.
 
 ## The idea

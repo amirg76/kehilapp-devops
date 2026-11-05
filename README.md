@@ -44,7 +44,7 @@ flowchart TD
         Caddy --> Proxy["proxy — nginx<br/>path routing"]
         Proxy -->|/| Frontend["frontend<br/>(Vite static + nginx)"]
         Proxy -->|/admin| Admin["admin<br/>(Vite static + nginx)"]
-        Proxy -->|/api| Backend["backend<br/>Node 20 / Express :5001"]
+        Proxy -->|/api| Backend["backend<br/>Node 24 / Express :5001"]
         Backend --> Mongo[("mongo :27017<br/>volume: mongo_data")]
     end
 
@@ -130,7 +130,7 @@ What that means for this repo:
 | `BUCKET_*` (4) | yes | S3-compatible storage for attachments. Placeholders keep everything **except attachments** working: posting a message *with* a file then fails with 500 (seen 29.10 on the demo box) |
 | `BUCKET_ENDPOINT` | for R2 | optional; set to `https://<account-id>.r2.cloudflarestorage.com` with `BUCKET_REGION=auto` for Cloudflare R2 (free: 10 GB, no egress fees); leave unset for AWS S3 (backend PR `r2-storage`) |
 | `DOMAIN`, `ACME_EMAIL` | yes | for Caddy's certificate |
-| `REGISTRY`, `TAG` | yes | `ghcr.io/amirg76`, `latest` or a short SHA |
+| `REGISTRY`, `TAG` | yes | `ghcr.io/amirg76`; `build-<n>` on the shared box, set by `scripts/deploy-shared-box.sh` |
 
 Never set `EXPOSE_VERIFICATION_LINK` on a server: the backend refuses to boot
 with it in production, on purpose.
@@ -194,7 +194,7 @@ kehilapp-devops/
 │   ├── Caddyfile                 imports sites/*.caddy
 │   └── sites/kehilapp.caddy      first tenant
 ├── docker/
-│   ├── backend.Dockerfile        Node 20 backend image (multi-stage)
+│   ├── backend.Dockerfile        Node 24 backend image (multi-stage)
 │   ├── frontend.Dockerfile       Vite public site → static nginx
 │   ├── admin.Dockerfile          Vite admin panel → static nginx
 │   ├── .dockerignore.example      copy into each app repo as .dockerignore

@@ -1,0 +1,2 @@
+# Scripts run on Linux. A CRLF here breaks them on the box.
+*.sh text eol=lf

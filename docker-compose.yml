@@ -97,7 +97,7 @@ services:
     networks: [kehilnet]
 
   proxy:
-    image: nginx:1.27-alpine
+    image: nginx:1.30-alpine
     restart: unless-stopped
     ports:
       - "8080:80"          # host:container — the only door into the stack

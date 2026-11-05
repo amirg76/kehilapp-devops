@@ -33,7 +33,7 @@ git pull --ff-only                    # refresh compose/nginx/caddy configs
 
 # Pick the image tag you want:
 export REGISTRY=ghcr.io/<owner-lowercase>
-export TAG=latest                     # or dev, or a specific 7-char git sha
+export TAG=latest                     # or dev, or a specific 7-char git sha (AWS only; the shared box deploys with scripts/deploy-shared-box.sh)
 
 # Both -f files, always: the second one keeps this project's Caddy off and
 # puts the nginx edge on the shared `edge` network (runbook 00). Without it,

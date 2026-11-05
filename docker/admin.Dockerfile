@@ -12,7 +12,7 @@
 # ── Stage 1: build ──────────────────────────────────────────────────────────
 # --platform=$BUILDPLATFORM: static output, same for every CPU — see
 # frontend.Dockerfile for why this avoids QEMU emulation on arm64 builds.
-FROM --platform=$BUILDPLATFORM node:20-alpine AS build
+FROM --platform=$BUILDPLATFORM node:24-alpine AS build
 WORKDIR /app
 
 # VITE_API_BASE_URL: where the API is. The admin's own request paths already
@@ -32,7 +32,7 @@ COPY . .
 RUN npm run build          # tsc && vite build → /app/dist
 
 # ── Stage 2: serve with nginx ───────────────────────────────────────────────
-FROM nginx:1.27-alpine AS runtime
+FROM nginx:1.30-alpine AS runtime
 COPY --from=build /app/dist /usr/share/nginx/html
 
 EXPOSE 80

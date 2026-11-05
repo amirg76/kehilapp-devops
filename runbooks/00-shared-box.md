@@ -162,7 +162,7 @@ cp .env.example .env
 nano .env
 ```
 Fill in every "yes" row of the README table ("Server .env"). On this box:
-- `REGISTRY=ghcr.io/amirg76`, `TAG=latest`
+- `REGISTRY=ghcr.io/amirg76`, `TAG=latest` for the first start only (see "Deploying a new build")
 - `APP_BASE_URL=https://kehilapp.letstalkanddesign.com`
 - `ALLOWED_ORIGINS=https://kehilapp.letstalkanddesign.com`
 - `MONGO_URI` = the Atlas SRV string for database `kehilapp_demo`
@@ -220,6 +220,33 @@ proof that `MONGO_URI` names the right database: on the first run (29.10) the
 pasted Atlas string ended in `/` with no database name, Mongo silently used
 `test`, `/api/messages` answered 500, and this script would have refused.
 Check before seeding: `grep -c 'mongodb.net/kehilapp_demo?' .env` must be 1.
+
+## Deploying a new build
+
+`build-images.yml` tags every run `build-<run number>`; the number is on the run's
+Actions page. On the box:
+```bash
+cd /opt/kehilapp
+git pull --ff-only
+bash scripts/deploy-shared-box.sh build-57
+```
+**Done =** the last line is `DEPLOY OK`. The script pulls first, so a tag that does
+not exist changes nothing. It then waits for health and checks by content: each
+app's own text at its address, every asset in the page, and `db: up` from `/readyz`.
+A status code alone stayed green for 41 hours on 29.10.
+
+**Undo:** `bash scripts/deploy-shared-box.sh rollback` returns to the last good tag,
+even after several failed attempts. After a good deploy, a second rollback swaps back.
+It changes the application images only. nginx for `proxy` comes from the compose file,
+so undoing that means reverting the commit and `git pull`.
+
+The script refuses `latest`. When the box is still on `latest`, it keeps the running
+images under a local `pre-<date>` tag first, so the first rollback has a target.
+
+`reverse-proxy.conf` looks service names up again every 10 seconds, so a recreated
+service needs no `restart proxy`. Proved locally with addresses swapped on purpose.
+Changing that file itself is different: it is a mount, so `up -d` does not notice.
+After such a change run `docker compose ... exec proxy nginx -s reload`.
 
 ## When something is wrong
 

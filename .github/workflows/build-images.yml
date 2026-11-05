@@ -92,14 +92,19 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Tags: latest, this devops commit's short SHA, and the optional input.
-      # The runbooks deploy by `TAG=<sha>` to pin a build or roll back.
+      # Tags: latest, build-<run number>, this devops commit's short SHA, and the
+      # optional input. The shared box deploys by build-<n>: the same name on all
+      # three images and new on every run, unlike the SHA, which stays the same
+      # when a manual run rebuilds the apps from the same devops commit. Start a
+      # new run instead of "Re-run failed jobs": a re-run keeps the number but
+      # checks out the app's main again, so one build-<n> could mix two commits.
       - id: meta
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ matrix.image }}
           tags: |
             type=raw,value=latest
+            type=raw,value=build-${{ github.run_number }}
             type=sha,format=short
             type=raw,value=${{ github.event.inputs.tag }},enable=${{ github.event.inputs.tag != '' }}
 

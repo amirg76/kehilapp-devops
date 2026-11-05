@@ -160,7 +160,7 @@ services:
     cap_add: [CHOWN, SETUID, SETGID, NET_BIND_SERVICE]
     mem_limit: 64m      # measured 4.5 MiB / 5 pids (3.11)
     pids_limit: 50
-    image: nginx:1.27-alpine
+    image: nginx:1.30-alpine
     restart: always
     volumes:
       - ./docker/nginx/reverse-proxy.conf:/etc/nginx/conf.d/default.conf:ro
