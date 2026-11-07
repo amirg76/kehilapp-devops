@@ -431,6 +431,8 @@ B=/opt/kehilapp/shared-proxy/box
 sudo install -m 644 $B/52unattended-upgrades-local /etc/apt/apt.conf.d/
 sudo install -m 755 $B/post-reboot-check.sh /usr/local/sbin/
 sudo install -m 644 $B/post-reboot-check.service /etc/systemd/system/
+sudo install -D -m 644 $B/post-reboot-check-alert.conf \
+  /etc/systemd/system/post-reboot-check.service.d/alert.conf   # needs /opt/box-ops (backup setup)
 sudo systemctl daemon-reload && sudo systemctl enable post-reboot-check
 apt-config dump | grep -i automatic-reboot      # three lines, "true"/"01:30"
 sudo POST_REBOOT_SLEEP=0 /usr/local/sbin/post-reboot-check.sh   # test, no reboot
@@ -443,8 +445,13 @@ check logged `2026-11-03T18:01:21 OK kernel=6.8.0-147-generic containers=6`,
 and kehilapp and clinicdemo answered with the right content. Downtime
 under two minutes.
 
-Not done: a phone alert when the check fails. The log line and
-`systemctl status post-reboot-check` are the signal for now.
+Since 7.11 a failed check sends a Telegram alert through `box-alert@`
+(the OnFailure drop-in above). The same day the home check was found too
+weak: it looked for `dir="rtl"`, which the admin panel also carries, so it
+would have passed during the 29.10 swap. Now each page must carry its own
+marker and not the other app's. Proven against a local server that serves
+the two live pages swapped: the old script flagged only the admin page, the
+new one both.
 
 ## Maintenance pass 2026-11-07
 
@@ -471,8 +478,9 @@ run on failure, with a one-request-a-second probe of both sites throughout.
    reached `eth0` (tcpdump), so Hostinger does not filter UDP 443; an
    `aioquic` client got `HTTP/3 status 200` from both sites. Chrome stayed on
    h2 for the first half hour, likely because it had marked h3 broken while
-   the port was closed. Caddy warns that the UDP receive buffer is small
-   (`net.core.rmem_max`); left as is, it only limits HTTP/3 throughput.
+   the port was closed. Caddy warned that the UDP receive buffer was small;
+   `shared-proxy/box/60-quic-buffers.conf` goes to `/etc/sysctl.d/` and
+   applies at Caddy's next start.
 4. **Access log:** the `access_log` snippet in `Caddyfile`, imported by each
    site. It drops the query string and the Referer, because verification and
    password-reset links carry their token there. Checked locally with a
