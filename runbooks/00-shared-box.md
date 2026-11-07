@@ -63,7 +63,7 @@ meets, and cloud images ship a drop-in there (often `50-cloud-init.conf` with
 `PasswordAuthentication yes`) that silently wins over anything below. A drop-in
 that sorts first is the only edit that sticks:
 ```bash
-printf 'PasswordAuthentication no\nPermitRootLogin no\nKbdInteractiveAuthentication no\n' \
+printf 'PasswordAuthentication no\nPermitRootLogin no\nKbdInteractiveAuthentication no\nX11Forwarding no\nMaxAuthTries 3\nAllowUsers deploy\n' \
   | sudo tee /etc/ssh/sshd_config.d/00-hardening.conf
 grep -rn -iE "PasswordAuthentication|PermitRootLogin" /etc/ssh/sshd_config.d/   # see what else is there
 sudo sshd -t                                   # syntax check BEFORE restarting
@@ -89,10 +89,11 @@ sudo ufw default allow outgoing
 sudo ufw allow OpenSSH
 sudo ufw allow 80/tcp
 sudo ufw allow 443/tcp
+sudo ufw allow 443/udp comment 'HTTP/3'
 sudo ufw enable                     # answer y
-sudo ufw status                     # 22, 80, 443 — nothing else
+sudo ufw status                     # 22, 80, 443 (tcp and udp) — nothing else
 ```
-**Done =** three allowed ports, and your SSH session survived `ufw enable`.
+**Done =** those ports only, and your SSH session survived `ufw enable`.
 
 > Docker publishes ports by writing iptables rules directly and **bypasses ufw**.
 > That is why no project on this box may publish a port: only `shared-proxy`
@@ -106,10 +107,17 @@ page, not from memory — and not a `curl | sh` one-liner). Then:
 
 ```bash
 sudo usermod -aG docker deploy
+sudo dockerd --validate --config-file=/opt/kehilapp/shared-proxy/box/daemon.json
+sudo install -m 644 /opt/kehilapp/shared-proxy/box/daemon.json /etc/docker/daemon.json
+sudo systemctl restart docker
 exit                                # log in again so the group applies
 docker --version && docker compose version
+docker info --format '{{.LiveRestoreEnabled}} {{.LoggingDriver}}'   # true local
 ```
-**Done =** both print a version as `deploy`, without `sudo`.
+**Done =** both print a version as `deploy`, without `sudo`, and the last line
+reads `true local`. `live-restore` keeps containers running while the Docker
+daemon restarts, so a Docker upgrade does not take the sites down; `local`
+rotates the logs of any container that does not set its own driver.
 
 ## 4. The box-wide network and the shared entry point
 
@@ -437,6 +445,43 @@ under two minutes.
 
 Not done: a phone alert when the check fails. The log line and
 `systemctl status post-reboot-check` are the signal for now.
+
+## Maintenance pass 2026-11-07
+
+Applied in one run on Saturday 7.11 (market closed), each step stopping the
+run on failure, with a one-request-a-second probe of both sites throughout.
+
+1. **SSH:** `X11Forwarding no`, `MaxAuthTries 3`, `AllowUsers deploy` added to
+   `00-hardening.conf`. Before `systemctl reload ssh`, a transient timer
+   (`systemd-run --on-active=180`) was armed to put the old file back; a fresh
+   login then cancelled it. The dashboard tunnel (`ssh -L`) still opens, so
+   TCP forwarding stays on. A client that offers more than three keys now
+   fails with `Too many authentication failures`: give it `IdentitiesOnly yes`
+   and the one key.
+2. **Docker:** `shared-proxy/box/daemon.json` installed and applied with
+   `systemctl reload docker` (live-restore is reloadable), then
+   `apt-get install --only-upgrade docker-ce docker-ce-cli
+   docker-ce-rootless-extras docker-compose-plugin`: Engine 29.9.2 → 29.9.3,
+   Compose 5.6.1 → 5.7.0, containerd unchanged. The `StartedAt` of all 8
+   containers was identical before and after: **no container restarted**,
+   the trading engine included.
+3. **HTTP/3:** Caddy announced `h3` in `Alt-Svc` while UDP 443 was neither
+   published nor allowed. Now published (`443:443/udp`) and allowed in ufw.
+   Caddy logged `enabling HTTP/3 listener`; three UDP probes from the laptop
+   reached `eth0` (tcpdump), so Hostinger does not filter UDP 443; an
+   `aioquic` client got `HTTP/3 status 200` from both sites. Chrome stayed on
+   h2 for the first half hour, likely because it had marked h3 broken while
+   the port was closed. Caddy warns that the UDP receive buffer is small
+   (`net.core.rmem_max`); left as is, it only limits HTTP/3 throughput.
+4. **Access log:** the `access_log` snippet in `Caddyfile`, imported by each
+   site. It drops the query string and the Referer, because verification and
+   password-reset links carry their token there. Checked locally with a
+   control (without the filter the token appears in the log, with it 0
+   times) and live (`?token=` request → 0 matches).
+
+Measured cost: 1 of 43 probes failed, during the Caddy recreate. Previous
+files: `/root/00-hardening.conf.pre-20261107` and
+`/opt/shared-proxy/backup-20261107/`.
 
 ## First-run notes (2026-10-29, Hostinger KVM 4, Ubuntu 24.04.5)
 
