@@ -1,0 +1,11 @@
+[Unit]
+Description=Nightly encrypted backup of the shared box
+
+[Timer]
+# UTC on this box. After the demo's 00:00 reset, before the 01:30 update reboot.
+OnCalendar=*-*-* 00:20:00
+RandomizedDelaySec=120
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,4 @@
+# Each test run writes fake data, a throwaway gpg home and logs here.
+run-*/
+# REAL_ARCHIVE dumps from test-real-parts.sh: real data, never committed.
+real/

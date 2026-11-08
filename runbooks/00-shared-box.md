@@ -402,8 +402,8 @@ messages, 7 categories). Two traps on the way: the container could not read
 a 600 file owned by `deploy` until it ran as `--user deploy`, and
 `docker rm -f` without `-v` left four anonymous volumes (removed).
 
-Not yet in place: a SCHEDULED dump stored off the box. Until then this is
-a proven procedure, not a backup.
+Since 5.11 the same dump runs every night inside the off-box backup (next
+section).
 
 **Atlas access list closed (3.11, in the Atlas UI).** `0.0.0.0/0` (any
 address) was deleted. Before that, the owner's current PC address was added
@@ -414,6 +414,29 @@ box's `kehilapp_demo_srv` (`readWrite@kehilapp_demo` only) and an older
 admin user. Proof: `restart backend` forces new connections → healthy in 9 s,
 `DB connected`, `/readyz` `db: up`, `/api/messages` 200. A home IP that
 changes will need re-adding ("Add Current IP Address").
+
+## Off-box backup and Telegram alerts (5.11)
+
+Everything is in `shared-proxy/box/backup/`; its README has the setup order,
+the tests and the accepted limits. In short: every night at 00:20 UTC the box
+copies the clinicdemo and trading SQLite files through SQLite's own backup
+call, the kehilapp Atlas dump from the section above, every tenant's `.env`
+and the Caddy files, encrypts them to a public key whose private half is not
+on the box, uploads to an R2 bucket with a 14-day lock, checks the stored
+size, and sends one Telegram line. Silence is the alarm.
+
+```bash
+B=/opt/kehilapp/shared-proxy/box/backup
+bash $B/install.sh          # first run creates /opt/box-ops and stops
+# put backup.conf (mode 600) and backup-public.asc in /opt/box-ops, then:
+bash $B/install.sh          # installs the scripts, units and the timer
+sudo systemctl start box-backup.service   # one real run, then restore-check on the PC
+```
+
+`box-alert@.service` is the shared alert: `box-backup`, `clinicdemo-cron` and
+`post-reboot-check` all reach it through `OnFailure`. Proven: a full restore
+of a downloaded backup (5.11), the timer's own run (8.11, exit 0), and a unit
+failing on purpose reaching Telegram (7.11).
 
 ## Reboots after kernel updates (3.11)
 
@@ -432,7 +455,7 @@ sudo install -m 644 $B/52unattended-upgrades-local /etc/apt/apt.conf.d/
 sudo install -m 755 $B/post-reboot-check.sh /usr/local/sbin/
 sudo install -m 644 $B/post-reboot-check.service /etc/systemd/system/
 sudo install -D -m 644 $B/post-reboot-check-alert.conf \
-  /etc/systemd/system/post-reboot-check.service.d/alert.conf   # needs /opt/box-ops (backup setup)
+  /etc/systemd/system/post-reboot-check.service.d/alert.conf   # needs box-alert@ (backup/install.sh)
 sudo systemctl daemon-reload && sudo systemctl enable post-reboot-check
 apt-config dump | grep -i automatic-reboot      # three lines, "true"/"01:30"
 sudo POST_REBOOT_SLEEP=0 /usr/local/sbin/post-reboot-check.sh   # test, no reboot
