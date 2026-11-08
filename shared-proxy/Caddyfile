@@ -6,9 +6,23 @@
 	email {$ACME_EMAIL}
 }
 
+# Access log, used by every site through `import access_log`. It goes to the
+# container log, which rotates at 3 x 10 MB. The query string and Referer are left
+# out on purpose: e-mail verification and WordPress password reset links carry
+# their token there. Cookie and Authorization are already redacted by Caddy.
+(access_log) {
+	log {
+		format filter {
+			request>uri regexp "\?.*$" "?removed"
+			request>headers>Referer delete
+		}
+	}
+}
+
 # Each file in sites/ is a complete site block:
 #
 #   demo.example.com {
+#       import access_log
 #       encode zstd gzip
 #       header Strict-Transport-Security "max-age=31536000; includeSubDomains"
 #       reverse_proxy <that-project's-container>:80

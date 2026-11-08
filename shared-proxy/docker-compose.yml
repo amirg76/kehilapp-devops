@@ -52,6 +52,7 @@ services:
     ports:
       - "80:80"
       - "443:443"
+      - "443:443/udp"     # HTTP/3. Caddy announces it, so the port has to be open.
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./sites:/etc/caddy/sites:ro

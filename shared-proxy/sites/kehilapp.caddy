@@ -5,6 +5,7 @@
 # resolve to this box before Caddy can obtain the certificate.
 
 kehilapp.letstalkanddesign.com {
+	import access_log
 	encode zstd gzip
 	# HSTS lives on the TLS terminator. CSP, X-Frame-Options and the rest are
 	# set by the project's nginx where the HTML is served.

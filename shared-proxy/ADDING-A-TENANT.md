@@ -7,7 +7,8 @@ needs in order to join — nothing here is kehilapp-specific.
 
 Box facts (first run 2026-10-29): Hostinger KVM 4, Ubuntu 24.04, user `deploy`
 (key only, passwordless sudo), Docker Engine + Compose from Docker's apt repo,
-ufw allowing 22/80/443 only, `/opt/shared-proxy` = this folder, `/opt/<project>`
+ufw allowing 22, 80 and 443 (443 over TCP and, since 2026-11-07, UDP for
+HTTP/3) only, `/opt/shared-proxy` = this folder, `/opt/<project>`
 per tenant. The IP and SSH key name live in the owner's project registry, not
 in this public repo.
 
@@ -24,7 +25,9 @@ in this public repo.
    own private network.
 3. **One file here: `sites/<project>.caddy`.** Hostname → `reverse_proxy
    <container_name>:<port>`. Copy `sites/kehilapp.caddy` and change three
-   things (hostname, container name, port). Keep the HSTS header.
+   things (hostname, container name, port). Keep the HSTS header and the
+   `import access_log` line: it logs every request without query strings, so
+   tokens in links never reach the log.
 4. **Your secrets live in `/opt/<project>/.env`, mode 600, owned by `deploy`.**
    Never in git, never in the compose file, never in the Caddy file.
 5. **Every container gets the box baseline** (since 2026-11-03):
