@@ -1,0 +1,7 @@
+[Unit]
+Description=Telegram alert: %i failed
+
+[Service]
+Type=oneshot
+User=deploy
+ExecStart=/bin/bash /opt/box-ops/box-alert.sh "unit %i failed on the shared box" %i

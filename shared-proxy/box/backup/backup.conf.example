@@ -1,0 +1,7 @@
+# /opt/box-ops/backup.conf, mode 600. Sourced by the scripts: keep the quotes.
+R2_ENDPOINT="https://<account-id>.r2.cloudflarestorage.com"
+R2_BUCKET="box-backups"
+R2_ACCESS_KEY_ID=""
+R2_SECRET_ACCESS_KEY=""
+TELEGRAM_BOT_TOKEN=""
+TELEGRAM_CHAT_ID=""
