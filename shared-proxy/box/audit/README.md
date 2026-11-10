@@ -102,15 +102,29 @@ bash test/test-audit.sh        # 125 checks, about a minute in Git Bash
   logins ignored, only key logins parsed); each was caught (4, 1, 3, 1 and 2
   failures). Run one with `BOX_AUDIT_UNDER_TEST=<copy> bash test/test-audit.sh`.
 
+## On the box (10.11.2026)
+
+Installed from this commit with `git -c core.autocrlf=false archive` (script hash
+matched, 0 CR bytes). First run through `systemctl start box-audit.service`, the
+same unit the timer starts, as `deploy`:
+
+- success in 3 seconds; all 17 sections `_status ok`, including `sshd -T`, `ufw`
+  and the key search that need `sudo -n`.
+- the values were read back and made sense: 8 containers running, 0 restarts;
+  12 listening sockets (TCP 22/80/443, UDP 443, local DNS), no short-lived UDP;
+  ufw active with the expected rules; 5 secret files, all 600; no failed units;
+  2 certificates with 78 and 82 days left.
+- the Telegram message arrived (confirmed by the owner). It held one expected
+  warning: the first login address is "new" because `known-ips` starts empty.
+
+The real command outputs are not committed as test samples: they would put the
+box's details in a public repo. The parser tests keep the documented formats.
+
 ## Not proven yet
 
-- The readers ran only on a machine that is not the box. The first run on the box
-  is the test: every section must say `_status ok`. Then replace the parser
-  samples in the test with real captures.
-- `sshd -T` with Ubuntu's socket-activated ssh: it worked by hand on 29.10 and 8.11;
-  if it fails under the timer, the message says "could not read sshd" every day.
+- A run started by the timer itself, and the first comparison of two real days.
 - UDP sockets in `ss` that come and go (DHCP, time sync) would show as port
-  changes. Watch the first week; filter them if they do.
+  changes. None on day one; watch the first week and filter them if they appear.
 - Whether Docker counts the start after a reboot as a restart. If it does, the
   morning after a reboot shows "restarted" for every container.
 - A container stopped on purpose, or a secret file that is not 600 by design,
