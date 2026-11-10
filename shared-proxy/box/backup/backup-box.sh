@@ -7,7 +7,7 @@ umask 077
 OPS=${BOX_OPS:-/opt/box-ops}
 OPT=${BOX_OPT:-/opt}
 # shellcheck disable=SC1091
-. "$OPS/backup.conf"   # R2_ENDPOINT R2_BUCKET R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY TELEGRAM_*
+. "$OPS/backup.conf"   # R2_ENDPOINT R2_BUCKET R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY TELEGRAM_* HC_*
 
 STEP=start
 # A SIGKILL skips the trap below and would leave plain secrets behind. The work
@@ -113,3 +113,16 @@ STEP=done
 echo "stored $NAME, $SIZE bytes"
 # A message every night: silence is the alarm when the box itself is down.
 bash "$OPS/box-alert.sh" "box backup ok: $NAME, $((SIZE / 1024)) KB"
+
+# Healthchecks.io alerts when this ping is missing, on a channel this box does not
+# run. Only a verified upload reaches this line. The address goes through curl's
+# config on stdin, never the command line. A failed ping does not fail the backup,
+# and STEP stays "done": the backup is stored whatever happens to the ping.
+if [ -n "${HC_BACKUP_URL:-}" ]; then
+  if [[ $HC_BACKUP_URL =~ ^https?://[A-Za-z0-9./_:-]+$ ]]; then
+    printf 'url = "%s"\n' "$HC_BACKUP_URL" | curl -fsS -m 10 --retry 3 -o /dev/null -K - \
+      || echo "healthchecks ping failed (it alerts on its own when the ping is missing)"
+  else
+    echo "HC_BACKUP_URL is not a plain https address: no ping"
+  fi
+fi

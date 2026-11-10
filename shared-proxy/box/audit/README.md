@@ -52,6 +52,12 @@ caller and says nothing when `backup.conf` is missing, so the run checks both: n
 New login addresses are learned only after the message went out, so a lost
 "new address" warning comes again the next day.
 
+**Silence alerts too.** With `HC_AUDIT_URL` in `backup.conf` (optional), a run whose
+message went out pings Healthchecks.io. A day plus two hours without a ping alerts
+there, on a channel the box does not run: the box down, the timer stopped, or the
+message lost. The address goes to curl on stdin, never on the command line. A failed
+ping does not fail the run, since the missing ping alerts by itself.
+
 ## Files on the box
 
 | Path | What |
@@ -81,7 +87,7 @@ real comparison.
 ## Tests
 
 ```bash
-bash test/test-audit.sh        # 125 checks, about a minute in Git Bash
+bash test/test-audit.sh        # 134 checks, about a minute in Git Bash
 ```
 
 - **compare:** 31 changes, each one checked twice, present after the change and
@@ -91,6 +97,13 @@ bash test/test-audit.sh        # 125 checks, about a minute in Git Bash
 - **run:** three days with a fake Telegram: baseline, two warnings, then "OK"
   (a new address warns once), and old snapshots are removed. A failed send and a
   missing `backup.conf` fail the run, and the address is not learned.
+- **ping:** a fake `curl` records its arguments and stdin. The audit's address (not
+  the backup's) is pinged after a sent message, never on the command line; no ping
+  when the message was lost, no address is set, or the address holds a quote; a
+  failing ping keeps the run green (and the test checks the failing curl really ran).
+  The value is read by sourcing the file, like the backup does. Four broken copies
+  (ping before the send, address on the command line, no `-K -`, no address check)
+  were caught.
 - **parsers:** fake `journalctl`, `systemctl`, `ss`, `ufw`, `sshd` and `docker`
   print sample output (key, password and keyboard-interactive logins, a hostile
   user name, the systemctl bullet, the ufw table header, a repeated `port`).

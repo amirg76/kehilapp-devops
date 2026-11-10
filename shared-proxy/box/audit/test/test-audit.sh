@@ -168,6 +168,50 @@ OPS3="$WORK/ops3"; mkdir -p "$OPS3"; cp "$OPS/box-alert.sh" "$OPS3/"
 BOX_AUDIT_STATE="$ST" BOX_OPS="$OPS3" BOX_AUDIT_DATE=2026-11-13 BOX_AUDIT_SNAPSHOT_FROM="$d4" "$AUDIT" run >/dev/null 2>&1 \
   && bad "run: missing backup.conf must fail" || ok
 
+# --- Healthchecks ping: only after the message went out; the address never on argv.
+HCBIN="$WORK/hcbin"; mkdir -p "$HCBIN"
+printf '#!/usr/bin/env bash\necho "argv: $*" >> "%s/curl.log"\ncat >> "%s/curl.log"\n' "$WORK" "$WORK" > "$HCBIN/curl"
+chmod +x "$HCBIN/curl"
+HC='https://hc-ping.com/aaaa-test-ping'
+hcrun() { # ops-folder state-folder: one run with the fake curl first on PATH
+  : > "$WORK/curl.log"
+  PATH="$HCBIN:$PATH" BOX_AUDIT_STATE="$2" BOX_OPS="$1" BOX_AUDIT_DATE=2026-11-10 \
+    BOX_AUDIT_SNAPSHOT_FROM="$WORK/base" "$AUDIT" run >/dev/null 2>&1
+}
+OPS4="$WORK/ops4"; ST4="$WORK/state4"; mkdir -p "$OPS4" "$ST4"
+cp "$OPS/box-alert.sh" "$OPS4/"
+# Quotes and a comment, as in backup.conf.example: read like the backup reads it.
+printf 'TELEGRAM_CHAT_ID="1"\nHC_AUDIT_URL="%s"  # audit check\nHC_BACKUP_URL="https://hc-ping.com/bbbb-other"\n' "$HC" > "$OPS4/backup.conf"
+hcrun "$OPS4" "$ST4" || bad "ping: run exit code"
+log=$(cat "$WORK/curl.log")
+has "ping: the audit address, after the message" "^url = \"$HC\"$" "$log"
+hasnt "ping: not the backup address" 'bbbb-other' "$log"
+hasnt "ping: the address is not on the command line" 'hc-ping' "$(grep '^argv' <<<"$log")"
+# Without -K - the real curl ignores stdin and the ping silently never happens.
+has "ping: curl reads its config from stdin" '^argv: .* -K -$' "$log"
+# An address with a quote would break curl's config line: refused, not sent.
+OPS8="$WORK/ops8"; ST8="$WORK/state8"; mkdir -p "$OPS8" "$ST8"
+cp "$OPS/box-alert.sh" "$OPS8/"
+printf '%s\n' "HC_AUDIT_URL='https://hc-ping.com/a\"b'" > "$OPS8/backup.conf"
+hcrun "$OPS8" "$ST8" || bad "ping: a bad address must not fail the run"
+[ -s "$WORK/curl.log" ] && bad "ping: a bad address is not sent" "$(cat "$WORK/curl.log")" || ok
+# Message lost: no ping, so Healthchecks alerts as well.
+OPS5="$WORK/ops5"; ST5="$WORK/state5"; mkdir -p "$OPS5" "$ST5"
+cp "$OPS2/box-alert.sh" "$OPS5/"; cp "$OPS4/backup.conf" "$OPS5/"
+hcrun "$OPS5" "$ST5" && bad "ping: lost message must still fail the run" || ok
+[ -s "$WORK/curl.log" ] && bad "ping: no ping when the message was lost" "$(cat "$WORK/curl.log")" || ok
+# No address configured: no curl at all.
+OPS6="$WORK/ops6"; ST6="$WORK/state6"; mkdir -p "$OPS6" "$ST6"
+cp "$OPS/box-alert.sh" "$OPS6/"; printf 'TELEGRAM_CHAT_ID=1\n' > "$OPS6/backup.conf"
+hcrun "$OPS6" "$ST6" || bad "ping: run without an address must pass"
+[ -s "$WORK/curl.log" ] && bad "ping: no curl without an address" "$(cat "$WORK/curl.log")" || ok
+# The ping service is down: the run still passes (Healthchecks alerts on its own).
+printf '#!/usr/bin/env bash\necho "failing curl ran" >> "%s/curl.log"\ncat > /dev/null; exit 7\n' "$WORK" > "$HCBIN/curl"
+ST7="$WORK/state7"; mkdir -p "$ST7"
+hcrun "$OPS4" "$ST7" || bad "ping: a failed ping must not fail the run"
+# Control: the failing curl really ran, so the line above did not pass by skipping it.
+has "ping: the failing curl was called" '^failing curl ran$' "$(cat "$WORK/curl.log")"
+
 # --- parsers: fake tools print the documented output formats of the real ones.
 # Replace these samples with captures from the box after the first install.
 FAKE="$WORK/fakebin"; mkdir -p "$FAKE"

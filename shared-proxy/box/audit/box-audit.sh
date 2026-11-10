@@ -278,6 +278,20 @@ compare() { # old new [known-ips]
     }' part=1 "$1" part=2 "${3:-/dev/null}" part=3 "$2" | LC_ALL=C sort -n -s -k1,1
 }
 
+hc_ping() { # Healthchecks.io: a missing ping alerts on a channel this box does not run
+  local url
+  # Read it the way backup-box.sh does (the shell sources the file), in a subshell,
+  # so quotes, comments and repeated keys mean the same thing in both scripts.
+  url=$(. "$OPS/backup.conf" >/dev/null 2>&1; printf '%s' "${HC_AUDIT_URL:-}")
+  [ -n "$url" ] || return 0
+  # Only a plain address goes into curl's config: no quote or backslash to escape.
+  [[ $url =~ ^https?://[A-Za-z0-9./_:-]+$ ]] \
+    || { echo "HC_AUDIT_URL is not a plain https address: no ping"; return 0; }
+  # Through curl's config on stdin: the address never shows in a process list.
+  printf 'url = "%s"\n' "$url" | curl -fsS -m 10 --retry 3 -o /dev/null -K - \
+    || echo "healthchecks ping failed (it alerts on its own when the ping is missing)"
+}
+
 run() {
   local today snap prev report warn info head msg sent
   today=${BOX_AUDIT_DATE:-$(date -u +%F)}
@@ -313,6 +327,8 @@ run() {
   sent=$(bash "$OPS/box-alert.sh" "$(head -c 3800 <<<"$msg")" 2>&1)
   if [ -n "$sent" ]; then echo "$head"; echo "$sent"; return 1; fi
   echo "$head"
+  # The ping means "today's message went out", so it comes only after the send.
+  hc_ping
   # Only after the message went out: a new address warns once, then it is known.
   awk -F'\t' '$1 == "login" && $2 != "_status" {split($2, a, " "); print a[1]}' "$snap" >> "$STATE/known-ips"
   LC_ALL=C sort -u -o "$STATE/known-ips" "$STATE/known-ips"
