@@ -24,8 +24,8 @@ INFO packages: 4 upgraded, 0 added, 0 removed: openssl, libssl3t64, ...
 | `pub` | `docker ps` | a container publishes a port (rule 1 of ADDING-A-TENANT) |
 | `ufw` | `ufw status verbose` | a rule changes, or the firewall is not active |
 | `user` | `getent passwd` | a login user appears, or a second uid 0 |
-| `key` | `ssh-keygen -lf` on every `authorized_keys` | a key is added or removed |
-| `sshd` | `sshd -T` (effective settings) | a security setting changes |
+| `key` | `ssh-keygen -lf` on every `authorized_keys` and `authorized_keys2` (the names sshd reads; a renamed file is not a key) | a key is added or removed |
+| `sshd` | `sshd -T` (effective settings, including where keys are read from) | a security setting changes; a change to `authorizedkeysfile` also means the `key` section may no longer see every key |
 | `file` | `sha256sum` of ssh, sudo, cron, sysctl, systemd, Docker, Caddy and box-ops files | a hash changes |
 | `secret` | `stat` of every `/opt/*/.env` and `backup.conf` | mode is not 600, or owner changes |
 | `timer` | `systemctl list-unit-files --type=timer` | an enabled timer appears or disappears |
@@ -87,7 +87,7 @@ real comparison.
 ## Tests
 
 ```bash
-bash test/test-audit.sh        # 134 checks, about a minute in Git Bash
+bash test/test-audit.sh        # 140 checks, about a minute in Git Bash
 ```
 
 - **compare:** 31 changes, each one checked twice, present after the change and

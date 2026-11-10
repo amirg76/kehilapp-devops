@@ -242,7 +242,7 @@ To                         Action      From
 22/tcp (OpenSSH)           ALLOW IN    Anywhere
 80/tcp                     ALLOW IN    Anywhere
 L"
-fake sshd "printf '%s\n' 'port 22' 'port 2222' 'passwordauthentication no' 'usedns no'"
+fake sshd "printf '%s\n' 'port 22' 'port 2222' 'passwordauthentication no' 'usedns no' 'authorizedkeysfile .ssh/authorized_keys .ssh/authorized_keys2'"
 fake docker 'exit 1'
 mkdir -p "$WORK/sites"; printf '(snippet) {\n}\n' > "$WORK/sites/snippet.caddy"
 out=$(PATH="$FAKE:$PATH" BOX_AUDIT_SITES="$WORK/sites" BOX_OPS="$WORK/no-ops" "$AUDIT" collect 2>/dev/null)
@@ -263,6 +263,23 @@ has "parse ufw: rule" "^ufw${T}80/tcp ALLOW IN Anywhere${T}present$" "$out"
 hasnt "parse ufw: table header skipped" "^ufw${T}(To |--)" "$out"
 has "parse sshd: repeated setting kept whole" "^sshd${T}port${T}22,2222$" "$out"
 hasnt "parse sshd: settings outside the list ignored" 'usedns' "$out"
+has "parse sshd: where keys are read from" "^sshd${T}authorizedkeysfile${T}.ssh/authorized_keys .ssh/authorized_keys2$" "$out"
+# Keys: only the names sshd reads. Real keys made here, with the real ssh-keygen.
+KR="$WORK/keyroots"; mkdir -p "$KR/root/.ssh" "$KR/home/alice/.ssh"
+for k in r0 r1 a1 a2; do ssh-keygen -q -t ed25519 -N '' -C "test-$k" -f "$WORK/$k" >/dev/null; done
+cp "$WORK/r0.pub" "$KR/root/.ssh/authorized_keys"
+cp "$WORK/r1.pub" "$KR/root/.ssh/authorized_keys.disabled-20261110"
+cp "$WORK/a1.pub" "$KR/home/alice/.ssh/authorized_keys"
+cp "$WORK/a2.pub" "$KR/home/alice/.ssh/authorized_keys2"
+# Base64 holds "+", a regex operator for has/hasnt: escaped, or a check passes by luck.
+fpr() { ssh-keygen -lf "$WORK/$1.pub" | awk '{print $2}' | sed 's/+/[+]/g'; }
+out=$(PATH="$FAKE:$PATH" BOX_AUDIT_KEY_ROOTS="$KR/root $KR/home" BOX_AUDIT_SITES="$WORK/sites" \
+  BOX_OPS="$WORK/no-ops" "$AUDIT" collect 2>/dev/null)
+has "parse key: root's authorized_keys, named root" "^key${T}root $(fpr r0)${T}256 \(ED25519\)$" "$out"
+has "parse key: authorized_keys" "^key${T}alice $(fpr a1)${T}256 \(ED25519\)$" "$out"
+has "parse key: authorized_keys2" "^key${T}alice $(fpr a2)${T}256 \(ED25519\)$" "$out"
+hasnt "parse key: a renamed file is not a key" "$(fpr r1)" "$out"
+has "parse key: section read" "^key${T}_status${T}ok$" "$out"
 has "parse docker down: section unavailable" "^ctr${T}_status${T}unavailable$" "$out"
 has "parse cert: site file without a host name is reported" "^metric${T}cert_days:snippet.caddy${T}unreadable$" "$out"
 

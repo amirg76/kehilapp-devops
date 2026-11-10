@@ -88,17 +88,25 @@ c_key() {
   sudo -n true || return 1
   # find runs as root: home folders are 750 on Ubuntu 24.04, so a glob run as
   # deploy would not see other users' keys and would skip them in silence.
-  files=$(sudo -n find /root /home -maxdepth 3 -path '*/.ssh/authorized_keys*' -type f -size +0) || return 1
+  # Only the two names sshd reads (its default AuthorizedKeysFile). A file renamed to
+  # switch a key off, such as authorized_keys.disabled-<date>, is not a key any more.
+  # BOX_AUDIT_KEY_ROOTS exists for the tests only.
+  # shellcheck disable=SC2086
+  files=$(sudo -n find ${BOX_AUDIT_KEY_ROOTS:-/root /home} -maxdepth 3 \
+    \( -path '*/.ssh/authorized_keys' -o -path '*/.ssh/authorized_keys2' \) -type f -size +0) || return 1
   while IFS= read -r f; do
     [ -n "$f" ] || continue
-    case $f in /root/*) u=root ;; *) u=${f#/home/}; u=${u%%/*} ;; esac
+    # /home first: a user named "root" under /home must not merge with the real root.
+    case $f in */home/*) u=${f##*/home/}; u=${u%%/*} ;; *) u=root ;; esac
     # Bits, fingerprint and type only; the comment is free text.
     sudo -n ssh-keygen -lf "$f" | awk -v u="$u" '{print "key\t" u " " $2 "\t" $1 " " $NF}' || return 1
   done <<<"$files"
 }
 
 c_sshd() { # a setting given more than once (port) keeps all its values on one line
-  sudo -n sshd -T | awk '$1 ~ /^(passwordauthentication|permitrootlogin|kbdinteractiveauthentication|pubkeyauthentication|x11forwarding|maxauthtries|allowusers|allowtcpforwarding|port)$/ {
+  # authorizedkeys*: c_key reads only the two default names; if sshd starts reading
+  # keys from somewhere else, this change is what warns.
+  sudo -n sshd -T | awk '$1 ~ /^(passwordauthentication|permitrootlogin|kbdinteractiveauthentication|pubkeyauthentication|x11forwarding|maxauthtries|allowusers|allowtcpforwarding|port|authorizedkeysfile|authorizedkeyscommand)$/ {
     k = $1; $1 = ""; sub(/^ /, ""); v[k] = (k in v) ? v[k] "," $0 : $0}
     END {for (k in v) print "sshd\t" k "\t" v[k]}'
 }
