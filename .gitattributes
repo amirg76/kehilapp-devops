@@ -1,2 +1,11 @@
 # Scripts run on Linux. A CRLF here breaks them on the box.
 *.sh text eol=lf
+# Same for the files that go to /etc or /opt on the box: systemd units and
+# drop-ins, sysctl, Caddy. With core.autocrlf=true on Windows, `git archive`
+# exported them with CRLF (measured 10.11.2026: 6 to 40 CR bytes per file).
+*.service text eol=lf
+*.timer text eol=lf
+*.conf text eol=lf
+*.caddy text eol=lf
+Caddyfile text eol=lf
+*.tpl text eol=lf
