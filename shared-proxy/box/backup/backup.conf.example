@@ -5,3 +5,6 @@ R2_ACCESS_KEY_ID=""
 R2_SECRET_ACCESS_KEY=""
 TELEGRAM_BOT_TOKEN=""
 TELEGRAM_CHAT_ID=""
+# Optional: each Healthchecks.io check's Ping URL. A missing daily ping alerts there.
+HC_AUDIT_URL=""
+HC_BACKUP_URL=""

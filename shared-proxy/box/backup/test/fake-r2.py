@@ -77,6 +77,14 @@ class Handler(BaseHTTPRequestHandler):
             f.write(data)
         self.reply(200)
 
+    def do_GET(self):
+        # Stands in for hc-ping.com: records each ping, serves nothing else.
+        if not self.path.startswith("/hc-ping/"):
+            return self.reply(404)
+        with open(os.path.join(ROOT, "hc.log"), "a", encoding="utf-8") as f:
+            f.write(self.path + "\n")
+        self.reply(200)
+
     def do_HEAD(self):
         if not signature_ok(self, b""):
             return self.reply(403)

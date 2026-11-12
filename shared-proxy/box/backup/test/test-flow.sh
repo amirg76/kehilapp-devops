@@ -27,6 +27,7 @@ R2_ACCESS_KEY_ID="$R2KEY"
 R2_SECRET_ACCESS_KEY="$R2SECRET"
 TELEGRAM_BOT_TOKEN="$TGTOKEN"
 TELEGRAM_CHAT_ID="42"
+HC_BACKUP_URL="http://127.0.0.1:$PORT/hc-ping/box-backup"
 EOF
 mkdir -p "$R/opt/clinicdemo" "$R/opt/kehilapp" "$R/opt/trading-desk/data" "$R/opt/shared-proxy/sites"
 for t in clinicdemo trading-desk shared-proxy; do echo "PASS_WORD=$MARK" > "$R/opt/$t/.env"; done
@@ -85,6 +86,7 @@ sleep 2
 
 tg() { grep -c "$1" "$R/r2/telegram.log" 2>/dev/null || true; }
 objs() { ls "$R/r2" | grep -c '^box-' || true; }
+hc() { grep -c '^/hc-ping/box-backup$' "$R/r2/hc.log" 2>/dev/null || true; }
 left() { echo $(($(ls -A "$R/tmp" | wc -l) + $(ls -d "$R"/ops/tmp.* 2>/dev/null | wc -l))); }
 # Each case is a new failure: forget the hour-long repeat filter.
 run() { rm -f "$R/ops/.alert-box-backup.service"; bash "$R/ops/backup-box.sh" > "$R/out.txt" 2>&1; echo $?; }
@@ -103,6 +105,7 @@ echo "== 1 success"
 ok "exit" "$(run)" 0
 ok "one object stored" "$(objs)" 1
 ok "telegram ok" "$(tg 'box backup ok')" 1
+ok "healthchecks ping after the verified upload" "$(hc)" 1
 ok "temp folder gone" "$(left)" 0
 F=$(ls "$R"/r2/box-* | head -1)
 ok "no secret in the encrypted file" "$(grep -c "$MARK" "$F")" 0
@@ -145,6 +148,15 @@ mkdir "$R/ops/tmp.stale"; echo "$MARK" > "$R/ops/tmp.stale/config.tar.gz"
 ok "exit" "$(run)" 0
 ok "stale folder gone" "$(left)" 0
 
+echo "== 2d healthchecks unreachable: the backup still succeeds"
+sed -i "s|^HC_BACKUP_URL=.*|HC_BACKUP_URL=\"http://127.0.0.1:9/hc-ping/box-backup\"|" "$R/ops/backup.conf"
+oks=$(tg 'box backup ok')
+ok "exit" "$(run)" 0
+ok "telegram ok sent" "$(tg 'box backup ok')" "$((oks + 1))"
+ok "says the ping failed" "$(grep -c 'healthchecks ping failed' "$R/out.txt")" 1
+ok "no ping recorded" "$(hc)" 2
+sed -i "s|^HC_BACKUP_URL=.*|HC_BACKUP_URL=\"http://127.0.0.1:$PORT/hc-ping/box-backup\"|" "$R/ops/backup.conf"
+
 echo "== 3 wrong R2 secret"
 sed -i 's/R2SECRETVALUE-abcdefghij/WRONGWRONG/' "$R/ops/backup.conf"
 before=$(objs)
@@ -175,6 +187,8 @@ echo "== 6 container down"
 ok "exit" "$(run)" 1
 ok "alert names the step" "$(tg 'FAILED at step: clinicdemo-database')" 1
 rm -f "$FAKE/container-down"
+# Cases 1 and 2c pinged, 2d could not, 3 to 6 failed: a failed run must never ping.
+ok "pings only from the two good runs" "$(hc)" 2
 
 echo "== 7 repeat alerts are dropped for an hour, other keys pass"
 for i in 1 2 3; do bash "$R/ops/box-alert.sh" "unit cron failed" cron.service; done

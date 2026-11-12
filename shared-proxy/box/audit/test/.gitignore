@@ -1,0 +1,2 @@
+# Each test run writes fake snapshots, a fake state folder and the "sent" messages here.
+run-*/

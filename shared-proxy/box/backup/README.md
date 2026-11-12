@@ -16,6 +16,11 @@ Every night at 00:20 UTC, after the demo reset and before the 01:30 update reboo
 4. Encrypts everything to a public key. The private key is not on the box.
 5. Uploads to R2 with curl, then checks the stored size.
 6. Sends a Telegram line: success every night, so silence is itself an alarm.
+7. Pings Healthchecks.io (`HC_BACKUP_URL` in `backup.conf`, optional). If the ping is
+   missing for a day plus two hours, Healthchecks alerts on its own channel, so a box
+   that is down, or a backup that never ran, is noticed without anyone reading the
+   chat. Only a verified upload pings. The address goes to curl on stdin, never on
+   the command line, and a failed ping does not fail the backup.
 
 A failure names the step in Telegram. `clinicdemo-cron.service` also alerts on failure,
 at most once an hour.

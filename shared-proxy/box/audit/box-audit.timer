@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily read-only audit of the shared box
+
+[Timer]
+# UTC on this box. After the 00:20 backup and the 01:30 update reboot, so the
+# morning message already shows a new kernel and a failed backup unit.
+OnCalendar=*-*-* 06:00:00
+RandomizedDelaySec=120
+Persistent=true
+
+[Install]
+WantedBy=timers.target
