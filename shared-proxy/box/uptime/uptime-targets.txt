@@ -1,0 +1,5 @@
+# name  public address  text the answer must contain (ASCII, no spaces)
+# The markers were read from the live sites on 14.11.2026.
+clinicdemo-booking https://clinicdemo.letstalkanddesign.com/booking/ ltd-booking
+kehilapp-web https://kehilapp.letstalkanddesign.com/ id="root"
+kehilapp-api https://kehilapp.letstalkanddesign.com/readyz "db":"up"

@@ -1,0 +1,19 @@
+[Unit]
+Description=Uptime check of the shared box's public sites
+After=network-online.target
+Wants=network-online.target
+OnFailure=box-alert@%n.service
+
+[Service]
+Type=oneshot
+User=deploy
+Nice=10
+ExecStart=/bin/bash /opt/box-ops/box-uptime.sh
+# 3 sites x 20 s, up to 3 alerts x 20 s, the ping: room for all of them.
+TimeoutStartSec=180
+# It only reads /opt/box-ops and writes its own state.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/box-uptime

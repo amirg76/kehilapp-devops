@@ -9,3 +9,5 @@
 *.caddy text eol=lf
 Caddyfile text eol=lf
 *.tpl text eol=lf
+# Read line by line on the box: a CR would end up inside the marker text.
+shared-proxy/box/uptime/uptime-targets.txt text eol=lf
