@@ -1,0 +1,10 @@
+[Unit]
+Description=Uptime check of the shared box's public sites, every 2 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=2min
+AccuracySec=10s
+
+[Install]
+WantedBy=timers.target
