@@ -447,7 +447,10 @@ turns on `Automatic-Reboot` at **01:30 UTC**, only when an update asked for
 it. `post-reboot-check.sh` + `.service` run after every boot: wait 2 min,
 check kehilapp `/`, `/admin/` and `/readyz` by content and clinicdemo by 200,
 bring both stacks up once more if anything failed, and log one line to
-`/var/log/post-reboot-check.log`.
+`/var/log/post-reboot-check.log`. Since 19.11.2026 it also checks CareerFlow AI
+(`/health/ready` must say `"degraded":false`) when its Caddy site file exists,
+and brings that stack up too when it is what failed. Tests, without a reboot:
+`bash shared-proxy/box/test-post-reboot-check.sh`.
 
 ```bash
 B=/opt/kehilapp/shared-proxy/box
