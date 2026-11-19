@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Runs once after every boot (post-reboot-check.service). Proves the sites came
 # back by CONTENT, not by status code alone (runbook 00: "200 is not proof").
-# If a check fails it brings both stacks up once more and re-checks.
+# If a check fails it brings the proxy and kehilapp up once more (and CareerFlow
+# AI, when that is what failed) and re-checks.
 # Result: one line in /var/log/post-reboot-check.log and in the journal;
 # exit 1 if still failing, so `systemctl status post-reboot-check` shows it and
 # the OnFailure drop-in (post-reboot-check-alert.conf) sends a Telegram alert.
@@ -9,7 +10,13 @@ set -o pipefail
 # The overrides exist for tests only; the service sets none of them.
 LOG=${POST_REBOOT_LOG:-/var/log/post-reboot-check.log}
 SITE=${POST_REBOOT_SITE:-https://kehilapp.letstalkanddesign.com}
-CLINIC_HOST=$(grep -m1 -oE '^[a-z0-9.-]+[.][a-z]{2,}' /opt/shared-proxy/sites/clinicdemo.caddy 2>/dev/null)
+SITES_DIR=${POST_REBOOT_SITES_DIR:-/opt/shared-proxy/sites}
+CF_DIR=${POST_REBOOT_CF_DIR:-/opt/careerflow-ai}
+# Tenant hostnames come from their Caddy site files on the box, not from this
+# public repo. No site file = that tenant is not checked.
+host_of() { grep -m1 -oE '^[a-z0-9.-]+[.][a-z]{2,}' "$SITES_DIR/$1.caddy" 2>/dev/null; }
+CLINIC_HOST=$(host_of clinicdemo)
+CF_HOST=$(host_of careerflow-ai)
 
 # The page must carry its own marker and not the other app's. Both apps say
 # dir="rtl", so that alone passed while / served the admin panel (2026-10-29).
@@ -27,6 +34,11 @@ check() {
   if [ -n "$CLINIC_HOST" ]; then
     [ "$(curl -s -o /dev/null --max-time 15 -w '%{http_code}' "https://$CLINIC_HOST/")" = 200 ] || fail="$fail clinicdemo"
   fi
+  # CareerFlow AI (19.11.2026): ready, with the search model loaded. GET, since
+  # the service answers HEAD with 405.
+  if [ -n "$CF_HOST" ]; then
+    curl -s --max-time 15 "https://$CF_HOST/health/ready" | grep -q '"degraded":false' || fail="$fail careerflow"
+  fi
   echo "$fail"
 }
 
@@ -40,6 +52,9 @@ if [ -n "$fail" ]; then
   (cd /opt/shared-proxy && docker compose up -d) >/dev/null 2>&1
   (cd /opt/kehilapp && docker compose -f docker-compose.prod.yml -f docker-compose.shared-box.yml --env-file .env up -d \
     && docker compose -f docker-compose.prod.yml -f docker-compose.shared-box.yml --env-file .env restart proxy) >/dev/null 2>&1
+  case "$fail" in *careerflow*)
+    (cd "$CF_DIR" && docker compose -f infra/docker-compose.prod.yml -f infra/docker-compose.shared-box.yml --env-file .env up -d) >/dev/null 2>&1 ;;
+  esac
   sleep "${POST_REBOOT_RETRY_SLEEP:-60}"
   fail=$(check)
 fi
